@@ -3,44 +3,25 @@ package mg.etu3273.framework;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-public class FrontServlet extends HttpServlet {
-    
-    private RequestDispatcher defaultDispatcher;
-
-    @Override
-    public void init() throws ServletException {
-        defaultDispatcher = getServletContext().getNamedDispatcher("default");
-    }
+public class FrontServlet1 extends HttpServlet {
     
     @Override
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         
-        String path = request.getRequestURI().substring(request.getContextPath().length());
-        
-        if (path.equals("/") || path.isEmpty()) {
-            handleMvcRequest(request, response);
-            return;
-        }
-        
-        boolean resourceExists = getServletContext().getResource(path) != null;
-
-        if (resourceExists) {
-            defaultDispatcher.forward(request, response);
-        } else {
-            handleMvcRequest(request, response);
-        }
+        // Ici on est sûr que c'est une requête MVC (le filtre a déjà filtré les ressources statiques)
+        handleMvcRequest(request, response);
     }
     
     private void handleMvcRequest(HttpServletRequest request, HttpServletResponse response) 
             throws IOException {
         
+        // VOTRE CODE EXISTANT - inchangé
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
         
@@ -50,6 +31,7 @@ public class FrontServlet extends HttpServlet {
         String queryString = request.getQueryString();
         String method = request.getMethod();
         
+        // Affichage des informations de debug
         out.println("<!DOCTYPE html>");
         out.println("<html>");
         out.println("<head>");
@@ -84,18 +66,7 @@ public class FrontServlet extends HttpServlet {
         out.println("</body>");
         out.println("</html>");
         
+        // Log pour le développement
         System.out.println("FrontServlet - Requête MVC reçue: " + method + " " + requestURI);
-    }
-    
-    @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
-            throws ServletException, IOException {
-        service(request, response);
-    }
-    
-    @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) 
-            throws ServletException, IOException {
-        service(request, response);
     }
 }
