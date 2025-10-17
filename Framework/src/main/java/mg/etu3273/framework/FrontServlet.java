@@ -3,54 +3,33 @@ package mg.etu3273.framework;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-
+/**
+ * FrontServlet - Point d'entrée unique pour toutes les requêtes
+ * Inspiré du DispatcherServlet de Spring MVC
+ */
+// @WebServlet(name = "FrontServlet", urlPatterns = {"/"}, loadOnStartup = 1)
 public class FrontServlet extends HttpServlet {
-    
-    private RequestDispatcher defaultDispatcher;
-
-    @Override
-    public void init() throws ServletException {
-        // Récupère le dispatcher par défaut de Tomcat pour les ressources statiques
-        defaultDispatcher = getServletContext().getNamedDispatcher("default");
-    }
     
     @Override
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         
-        // Obtenir le chemin relatif à partir de l'URI
         String path = request.getRequestURI().substring(request.getContextPath().length());
         
-        if (path.equals("/") || path.isEmpty()) {
-            handleMvcRequest(request, response);
-            return;
-        }
-    
-
-        // Vérifier si la ressource existe physiquement dans l'application
+        
         boolean resourceExists = getServletContext().getResource(path) != null;
 
-        if (resourceExists) {
-            // Déléguer à Tomcat pour les ressources statiques
-            defaultDispatcher.forward(request, response);
-        } else {
-            // Traiter comme une requête MVC (votre code actuel)
-            handleMvcRequest(request, response);
-        }
-    }
-    
-    private void handleMvcRequest(HttpServletRequest request, HttpServletResponse response) 
-            throws IOException {
         
-        // VOTRE CODE EXISTANT - inchangé
+        
+        // Configuration de la réponse
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
         
+        // Récupération des informations de la requête
         String contextPath = request.getContextPath();
         String servletPath = request.getServletPath();
         String requestURI = request.getRequestURI();
@@ -93,7 +72,7 @@ public class FrontServlet extends HttpServlet {
         out.println("</html>");
         
         // Log pour le développement
-        System.out.println("FrontServlet - Requête MVC reçue: " + method + " " + requestURI);
+        System.out.println("FrontServlet - Requête reçue: " + method + " " + requestURI);
     }
     
     @Override
