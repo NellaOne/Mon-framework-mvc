@@ -24,10 +24,6 @@ public class FrontServlet extends HttpServlet {
         
         String path = request.getRequestURI().substring(request.getContextPath().length());
         
-        if (path.equals("/") || path.isEmpty()) {
-            handleMvcRequest(request, response);
-            return;
-        }
         
         boolean resourceExists = getServletContext().getResource(path) != null;
 
