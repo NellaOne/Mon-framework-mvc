@@ -15,6 +15,7 @@ public class FrontServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
+        // Récupère le dispatcher par défaut de Tomcat pour les ressources statiques
         defaultDispatcher = getServletContext().getNamedDispatcher("default");
     }
     
@@ -22,13 +23,23 @@ public class FrontServlet extends HttpServlet {
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         
+        // Obtenir le chemin relatif à partir de l'URI
         String path = request.getRequestURI().substring(request.getContextPath().length());
         
+        if (path.equals("/") || path.isEmpty()) {
+            handleMvcRequest(request, response);
+            return;
+        }
+    
+
+        // Vérifier si la ressource existe physiquement dans l'application
         boolean resourceExists = getServletContext().getResource(path) != null;
 
         if (resourceExists) {
+            // Déléguer à Tomcat pour les ressources statiques
             defaultDispatcher.forward(request, response);
         } else {
+            // Traiter comme une requête MVC (votre code actuel)
             handleMvcRequest(request, response);
         }
     }
@@ -36,6 +47,7 @@ public class FrontServlet extends HttpServlet {
     private void handleMvcRequest(HttpServletRequest request, HttpServletResponse response) 
             throws IOException {
         
+        // VOTRE CODE EXISTANT - inchangé
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
         
@@ -45,6 +57,7 @@ public class FrontServlet extends HttpServlet {
         String queryString = request.getQueryString();
         String method = request.getMethod();
         
+        // Affichage des informations de debug
         out.println("<!DOCTYPE html>");
         out.println("<html>");
         out.println("<head>");
@@ -79,6 +92,7 @@ public class FrontServlet extends HttpServlet {
         out.println("</body>");
         out.println("</html>");
         
+        // Log pour le développement
         System.out.println("FrontServlet - Requête MVC reçue: " + method + " " + requestURI);
     }
     
