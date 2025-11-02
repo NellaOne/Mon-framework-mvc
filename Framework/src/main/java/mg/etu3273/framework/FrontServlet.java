@@ -2,6 +2,9 @@ package mg.etu3273.framework;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
 
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
@@ -13,9 +16,30 @@ public class FrontServlet extends HttpServlet {
     
     private RequestDispatcher defaultDispatcher;
 
+    private Map<String, Mapping> urlMappings = new HashMap<>();
+
     @Override
     public void init() throws ServletException {
         defaultDispatcher = getServletContext().getNamedDispatcher("default");
+
+        try {
+           /*  String basePackage = getInitParameter("basePackage");
+            if (basePackage == null || basePackage.isEmpty()) {
+                basePackage = "mg.etu3273";
+            }
+
+            System.out.println("=== INITIALISATION FRONTSERVLET ===");
+            System.out.println("Package de base: " + basePackage); */
+
+            // urlMappings = PackageScanner.scanControllers(basePackage);
+            urlMappings = PackageScanner.scanAllClasspath();
+
+
+            System.out.println("URLs enregistrées: " + urlMappings.size());
+            System.out.println("=================================");
+        } catch (Exception e) {
+            throw new ServletException("Erreur lors du scan des controlleurs", e);
+        }
     }
     
     @Override
@@ -24,6 +48,8 @@ public class FrontServlet extends HttpServlet {
         
         String path = request.getRequestURI().substring(request.getContextPath().length());
         
+        System.out.println("📥 Requête reçue: " + request.getMethod() + " " + path);
+
         if (path.equals("/") || path.isEmpty()) {
             handleMvcRequest(request, response);
             return;
@@ -32,12 +58,115 @@ public class FrontServlet extends HttpServlet {
         boolean resourceExists = getServletContext().getResource(path) != null;
 
         if (resourceExists) {
+            System.out.println("📄 Ressource statique détectée, forward vers Tomcat");
             defaultDispatcher.forward(request, response);
-        } else {
+            return;
+        } /* else {
             handleMvcRequest(request, response);
+        } */
+
+        Mapping mapping = urlMappings.get(path);
+
+        if (mapping != null) {
+            handleControllerMethod(request, response, mapping);
+        } else {
+            handle404(request, response, path);
         }
     }
     
+
+    private void handleControllerMethod(HttpServletRequest request, HttpServletResponse response, Mapping mapping) throws IOException {
+        response.setContentType("text/html;charset=UTF-8");
+        PrintWriter out = response.getWriter();
+
+        try {
+
+            System.out.println("🎯 Exécution du contrôleur:");
+            System.out.println("   Classe: " + mapping.getClassName());
+            System.out.println("   Méthode: " + mapping.getMethod().getName());
+
+            Class<?> clazz = Class.forName(mapping.getClassName());
+            Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+
+            Method method = mapping.getMethod();
+            Object result = method.invoke(controllerInstance);
+
+            out.println("<!DOCTYPE html>");
+            out.println("<html>");
+            out.println("<head>");
+            out.println("    <title>Framework MVC - Sprint 2</title>");
+            out.println("    <style>");
+            out.println("        body { font-family: Arial; margin: 40px; background: #f5f5f5; }");
+            out.println("        .container { background: white; padding: 30px; border-radius: 8px; }");
+            out.println("        .success { color: #27ae60; font-weight: bold; font-size: 20px; }");
+            out.println("        .info { margin: 20px 0; padding: 15px; background: #ecf0f1; border-radius: 5px; }");
+            out.println("    </style>");
+            out.println("</head>");
+            out.println("<body>");
+            out.println("    <div class='container'>");
+            out.println("        <h1>✅ Framework MVC - Sprint 2</h1>");
+            out.println("        <p class='success'>URL mappée avec succès !</p>");
+            out.println("        <div class='info'>");
+            out.println("            <strong>URL:</strong> " + request.getRequestURI() + "<br>");
+            out.println("            <strong>Contrôleur:</strong> " + mapping.getClassName() + "<br>");
+            out.println("            <strong>Méthode:</strong> " + method.getName() + "<br>");
+            out.println("            <strong>Résultat:</strong> " + result);
+            out.println("        </div>");
+            out.println("    </div>");
+            out.println("</body>");
+            out.println("</html>");
+
+        } catch(Exception e) {
+            System.err.println("❌ ERREUR lors de l'exécution du contrôleur: " + e.getMessage());
+            e.printStackTrace();
+            
+            out.println("<h1>❌ Erreur lors de l'exécution du contrôleur</h1>");
+            out.println("<pre>" + e.getMessage() + "</pre>");
+            out.println("<pre>");
+            e.printStackTrace(new PrintWriter(out));
+            out.println("</pre>");
+        }
+    }
+
+    private void handle404(HttpServletRequest request, HttpServletResponse response, String path) {
+        response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        response.setContentType("text/html;charset=UTF-8");
+        PrintWriter out = null;
+
+        try {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            response.setContentType("text/html;charset=UTF-8");
+            out = response.getWriter();
+            out.println("<!DOCTYPE html>");
+            out.println("<html>");
+            out.println("<head>");
+            out.println("    <title>404 - Page Non Trouvée</title>");
+            out.println("    <style>");
+            out.println("        body { font-family: Arial; margin: 40px; background: #f5f5f5; }");
+            out.println("        .container { background: white; padding: 30px; border-radius: 8px; }");
+            out.println("        .error { color: #e74c3c; font-size: 24px; }");
+            out.println("    </style>");
+            out.println("</head>");
+            out.println("<body>");
+            out.println("    <div class='container'>");
+            out.println("        <h1 class='error'>❌ 404 - Page Non Trouvée</h1>");
+            out.println("        <p>L'URL demandée <strong>" + path + "</strong> n'est pas mappée.</p>");
+            out.println("        <p>URLs disponibles:</p>");
+            out.println("        <ul>");
+            for (String url : urlMappings.keySet()) {
+                out.println("            <li><a href='" + request.getContextPath() + url + "'>" + url + "</a></li>");
+            }   out.println("        </ul>");
+            out.println("    </div>");
+            out.println("</body>");
+            out.println("</html>");
+        } catch (IOException ex) {
+        } finally {
+            out.close();
+        }
+
+    }
+
+
     private void handleMvcRequest(HttpServletRequest request, HttpServletResponse response) 
             throws IOException {
         
