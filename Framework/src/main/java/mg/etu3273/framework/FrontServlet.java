@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletResponse;
 
 public class FrontServlet extends HttpServlet {    
     private static final String URL_MAPPINGS_KEY = "framework.urlMappings";
+
     private RequestDispatcher defaultDispatcher;
     // private Map<String, Mapping> urlMappings = new HashMap<>();
 
@@ -55,6 +56,7 @@ public class FrontServlet extends HttpServlet {
             handleMvcRequest(request, response);
             return;
         } */
+        
         boolean resourceExists = getServletContext().getResource(path) != null;
         if (resourceExists) {
             System.out.println("📄 Ressource statique détectée, forward vers Tomcat");
@@ -71,6 +73,7 @@ public class FrontServlet extends HttpServlet {
         }
         
         Mapping mapping = urlMappings.get(path);
+
         if (mapping != null) {
             handleControllerMethod(request, response, mapping);
         } else {
@@ -90,52 +93,153 @@ public class FrontServlet extends HttpServlet {
             System.out.println("   Méthode: " + mapping.getMethod().getName());
 
             Class<?> clazz = Class.forName(mapping.getClassName());
+            System.out.println("   ✅ Classe chargée: " + clazz.getSimpleName());
+
             Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+            System.out.println("   ✅ Instance créée: " + controllerInstance.getClass().getName());
 
             Method method = mapping.getMethod();
+            System.out.println("   ✅ Méthode récupérée: " + method.getName() + "()");
+
             Object result = method.invoke(controllerInstance);
+            System.out.println("   ✅ Méthode invoquée avec succès !");
+            System.out.println("   📦 Résultat retourné: " + result);
+            System.out.println("   📦 Type de résultat: " + (result != null ? result.getClass().getSimpleName() : "null"));
 
-            out.println("<!DOCTYPE html>");
-            out.println("<html>");
-            out.println("<head>");
-            out.println("    <title>Framework MVC - Sprint 2</title>");
-            out.println("    <style>");
-            out.println("        body { font-family: Arial; margin: 40px; background: #f5f5f5; }");
-            out.println("        .container { background: white; padding: 30px; border-radius: 8px; }");
-            out.println("        .success { color: #27ae60; font-weight: bold; font-size: 20px; }");
-            out.println("        .info { margin: 20px 0; padding: 15px; background: #ecf0f1; border-radius: 5px; }");
-            out.println("    </style>");
-            out.println("</head>");
-            out.println("<body>");
-            out.println("    <div class='container'>");
-            out.println("        <h1>✅ Framework MVC - Sprint 2</h1>");
-            out.println("        <p class='success'>URL mappée avec succès !</p>");
-            out.println("        <div class='info'>");
-            out.println("            <strong>URL:</strong> " + request.getRequestURI() + "<br>");
-            out.println("            <strong>Contrôleur:</strong> " + mapping.getClassName() + "<br>");
-            out.println("            <strong>Méthode:</strong> " + method.getName() + "<br>");
-            out.println("            <strong>Résultat:</strong> " + result);
-            out.println("        </div>");
-            out.println("    </div>");
-            out.println("</body>");
-            out.println("</html>");
-
+            displayResult(out, request, mapping, method, result);
+            
         } catch(Exception e) {
-            System.err.println("❌ ERREUR lors de l'exécution du contrôleur: " + e.getMessage());
+            System.err.println("❌ ERREUR lors de l'invocation du contrôleur: " + e.getMessage());
             e.printStackTrace();
             
-            out.println("<h1>❌ Erreur lors de l'exécution du contrôleur</h1>");
-            out.println("<pre>" + e.getMessage() + "</pre>");
-            out.println("<pre>");
-            e.printStackTrace(new PrintWriter(out));
-            out.println("</pre>");
+            displayError(out, e, mapping);
         }
+    }
+    
+    private void displayResult(PrintWriter out, 
+                              HttpServletRequest request,
+                              Mapping mapping, 
+                              Method method, 
+                              Object result) {
+        
+        out.println("<!DOCTYPE html>");
+        out.println("<html>");
+        out.println("<head>");
+        out.println("    <meta charset='UTF-8'>");
+        out.println("    <title>Framework MVC - Sprint 4</title>");
+        out.println("    <style>");
+        out.println("        body { font-family: 'Segoe UI', Arial; margin: 0; padding: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }");
+        out.println("        .container { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-width: 900px; margin: 0 auto; }");
+        out.println("        h1 { color: #2c3e50; border-bottom: 3px solid #667eea; padding-bottom: 15px; margin-bottom: 30px; }");
+        out.println("        .success { background: #d4edda; color: #155724; padding: 20px; border-radius: 8px; border-left: 5px solid #28a745; margin: 20px 0; }");
+        out.println("        .info-grid { display: grid; grid-template-columns: 200px 1fr; gap: 15px; margin: 20px 0; }");
+        out.println("        .label { font-weight: bold; color: #495057; }");
+        out.println("        .value { color: #212529; background: #f8f9fa; padding: 8px 12px; border-radius: 5px; font-family: 'Courier New', monospace; }");
+        out.println("        .result-box { background: #fff3cd; border: 2px solid #ffc107; padding: 20px; border-radius: 8px; margin: 20px 0; }");
+        out.println("        .result-content { font-size: 18px; font-weight: bold; color: #856404; word-wrap: break-word; }");
+        out.println("        .badge { display: inline-block; padding: 5px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }");
+        out.println("        .badge-success { background: #28a745; color: white; }");
+        out.println("        .badge-info { background: #17a2b8; color: white; }");
+        out.println("        .section { margin: 30px 0; }");
+        out.println("    </style>");
+        out.println("</head>");
+        out.println("<body>");
+        out.println("    <div class='container'>");
+        out.println("        <h1>🚀 Framework MVC - Sprint 4</h1>");
+        out.println("        <div class='success'>");
+        out.println("            <h2 style='margin: 0 0 10px 0;'>✅ Méthode invoquée avec succès !</h2>");
+        out.println("            <p style='margin: 0;'>La méthode du contrôleur a été exécutée via Reflection</p>");
+        out.println("        </div>");
+        
+        out.println("        <div class='section'>");
+        out.println("            <h3>📋 Informations de Mapping</h3>");
+        out.println("            <div class='info-grid'>");
+        out.println("                <div class='label'>URL demandée:</div>");
+        out.println("                <div class='value'>" + request.getRequestURI() + "</div>");
+        out.println("                <div class='label'>Contrôleur:</div>");
+        out.println("                <div class='value'>" + mapping.getClassName() + "</div>");
+        out.println("                <div class='label'>Méthode invoquée:</div>");
+        out.println("                <div class='value'>" + method.getName() + "()</div>");
+        out.println("                <div class='label'>Type de retour:</div>");
+        out.println("                <div class='value'>" + method.getReturnType().getSimpleName() + "</div>");
+        out.println("            </div>");
+        out.println("        </div>");
+        
+        out.println("        <div class='section'>");
+        out.println("            <h3>📦 Résultat de l'Invocation</h3>");
+        out.println("            <div class='result-box'>");
+        
+        if (result == null) {
+            out.println("                <div class='result-content'>⚠️ La méthode a retourné NULL</div>");
+        } else if (result instanceof String) {
+            out.println("                <span class='badge badge-success'>String</span>");
+            out.println("                <div class='result-content' style='margin-top: 10px;'>");
+            out.println("                    " + result);
+            out.println("                </div>");
+        } else {
+            out.println("                <span class='badge badge-info'>" + result.getClass().getSimpleName() + "</span>");
+            out.println("                <div class='result-content' style='margin-top: 10px;'>");
+            out.println("                    " + result.toString());
+            out.println("                </div>");
+        }
+        
+        out.println("            </div>");
+        out.println("        </div>");
+        
+        out.println("        <div class='section'>");
+        out.println("            <h3>✅ Vérifications Sprint 4</h3>");
+        out.println("            <ul>");
+        out.println("                <li>✅ Classe chargée dynamiquement</li>");
+        out.println("                <li>✅ Instance du contrôleur créée</li>");
+        out.println("                <li>✅ Méthode invoquée via Reflection</li>");
+        out.println("                <li>✅ Valeur de retour récupérée</li>");
+        out.println("                <li>✅ Résultat affiché avec PrintWriter</li>");
+        out.println("            </ul>");
+        out.println("        </div>");
+        
+        out.println("        <div style='margin-top: 30px; padding: 15px; background: #e7f3ff; border-radius: 8px;'>");
+        out.println("            <p style='margin: 0; color: #004085;'><strong>🎯 Sprint 4 Complété:</strong> Invocation réussie via Reflection !</p>");
+        out.println("        </div>");
+        
+        out.println("    </div>");
+        out.println("</body>");
+        out.println("</html>");
+    }
+
+    private void displayError(PrintWriter out, Exception e, Mapping mapping) {
+        out.println("<!DOCTYPE html>");
+        out.println("<html>");
+        out.println("<head>");
+        out.println("    <meta charset='UTF-8'>");
+        out.println("    <title>Erreur - Framework MVC</title>");
+        out.println("    <style>");
+        out.println("        body { font-family: Arial; margin: 40px; background: #f5f5f5; }");
+        out.println("        .container { background: white; padding: 30px; border-radius: 8px; }");
+        out.println("        .error { color: #e74c3c; }");
+        out.println("        pre { background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; }");
+        out.println("    </style>");
+        out.println("</head>");
+        out.println("<body>");
+        out.println("    <div class='container'>");
+        out.println("        <h1 class='error'>❌ Erreur lors de l'invocation</h1>");
+        out.println("        <p><strong>Contrôleur:</strong> " + mapping.getClassName() + "</p>");
+        out.println("        <p><strong>Méthode:</strong> " + mapping.getMethod().getName() + "</p>");
+        out.println("        <p><strong>Message d'erreur:</strong></p>");
+        out.println("        <pre>" + e.getMessage() + "</pre>");
+        out.println("        <p><strong>Stack trace:</strong></p>");
+        out.println("        <pre>");
+        e.printStackTrace(out);
+        out.println("        </pre>");
+        out.println("    </div>");
+        out.println("</body>");
+        out.println("</html>");
     }
 
     private void handle404(HttpServletRequest request, 
                           HttpServletResponse response, 
                           String path,
                           Map<String, Mapping> urlMappings) {
+
         response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = null;
@@ -160,7 +264,11 @@ public class FrontServlet extends HttpServlet {
             out.println("        <p>URLs disponibles:</p>");
             out.println("        <ul>");
             for (String url : urlMappings.keySet()) {
-                out.println("            <li><a href='" + request.getContextPath() + url + "'>" + url + "</a></li>");
+                Mapping m = urlMappings.get(url);
+                out.println("            <li>");
+                out.println("                <a href='" + request.getContextPath() + url + "'>" + url + "</a>");
+                out.println("                → " + m.getClassName() + "." + m.getMethod().getName() + "()");
+                out.println("            </li>");
             }
             out.println("        </ul>");
             out.println("    </div>");
