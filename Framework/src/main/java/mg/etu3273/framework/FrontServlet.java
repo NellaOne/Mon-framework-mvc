@@ -3,20 +3,19 @@ package mg.etu3273.framework;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Method;
-import java.util.HashMap;
 import java.util.Map;
 
 import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.ServletContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-public class FrontServlet extends HttpServlet {
-    
+public class FrontServlet extends HttpServlet {    
+    private static final String URL_MAPPINGS_KEY = "framework.urlMappings";
     private RequestDispatcher defaultDispatcher;
-
-    private Map<String, Mapping> urlMappings = new HashMap<>();
+    // private Map<String, Mapping> urlMappings = new HashMap<>();
 
     @Override
     public void init() throws ServletException {
@@ -27,50 +26,55 @@ public class FrontServlet extends HttpServlet {
             if (basePackage == null || basePackage.isEmpty()) {
                 basePackage = "mg.etu3273";
             }
-
             System.out.println("=== INITIALISATION FRONTSERVLET ===");
             System.out.println("Package de base: " + basePackage); */
-
             // urlMappings = PackageScanner.scanControllers(basePackage);
-            urlMappings = PackageScanner.scanAllClasspath();
-
+            // urlMappings = PackageScanner.scanAllClasspath();
+            System.out.println("=== INITIALISATION FRONTSERVLET ===");
+            
+            Map<String, Mapping> urlMappings = PackageScanner.scanAllClasspath();
 
             System.out.println("URLs enregistrées: " + urlMappings.size());
+
+            ServletContext context = getServletContext();
+            context.setAttribute(URL_MAPPINGS_KEY, urlMappings);
+            System.out.println("✅ URL Mappings stocké dans ServletContext avec la clé: " + URL_MAPPINGS_KEY);
             System.out.println("=================================");
         } catch (Exception e) {
             throw new ServletException("Erreur lors du scan des controlleurs", e);
         }
     }
     
-    @Override
+   @Override
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
-        
-        String path = request.getRequestURI().substring(request.getContextPath().length());
-        
-        System.out.println("📥 Requête reçue: " + request.getMethod() + " " + path);
 
-        if (path.equals("/") || path.isEmpty()) {
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        System.out.println("📥 Requête reçue: " + request.getMethod() + " " + path);
+        /* if (path.equals("/") || path.isEmpty()) {
             handleMvcRequest(request, response);
             return;
-        }
-        
+        } */
         boolean resourceExists = getServletContext().getResource(path) != null;
-
         if (resourceExists) {
             System.out.println("📄 Ressource statique détectée, forward vers Tomcat");
             defaultDispatcher.forward(request, response);
             return;
-        } /* else {
-            handleMvcRequest(request, response);
-        } */
+        }
 
+         @SuppressWarnings("unchecked")
+        Map<String, Mapping> urlMappings = (Map<String, Mapping>) 
+            getServletContext().getAttribute(URL_MAPPINGS_KEY);
+        
+        if (urlMappings == null) {
+            throw new ServletException("URL Mappings non initialisé dans ServletContext");
+        }
+        
         Mapping mapping = urlMappings.get(path);
-
         if (mapping != null) {
             handleControllerMethod(request, response, mapping);
         } else {
-            handle404(request, response, path);
+            handle404(request, response, path, urlMappings);
         }
     }
     
@@ -128,15 +132,17 @@ public class FrontServlet extends HttpServlet {
         }
     }
 
-    private void handle404(HttpServletRequest request, HttpServletResponse response, String path) {
+    private void handle404(HttpServletRequest request, 
+                          HttpServletResponse response, 
+                          String path,
+                          Map<String, Mapping> urlMappings) {
         response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = null;
-
+        
         try {
-            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-            response.setContentType("text/html;charset=UTF-8");
             out = response.getWriter();
+            
             out.println("<!DOCTYPE html>");
             out.println("<html>");
             out.println("<head>");
@@ -155,23 +161,30 @@ public class FrontServlet extends HttpServlet {
             out.println("        <ul>");
             for (String url : urlMappings.keySet()) {
                 out.println("            <li><a href='" + request.getContextPath() + url + "'>" + url + "</a></li>");
-            }   out.println("        </ul>");
+            }
+            out.println("        </ul>");
             out.println("    </div>");
             out.println("</body>");
             out.println("</html>");
+            
         } catch (IOException ex) {
+            ex.printStackTrace();
         } finally {
-            out.close();
+            if (out != null) {
+                out.close();
+            }
         }
-
     }
 
-
-    private void handleMvcRequest(HttpServletRequest request, HttpServletResponse response) 
+    /* private void handleMvcRequest(HttpServletRequest request, HttpServletResponse response) 
             throws IOException {
         
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Mapping> urlMappings = (Map<String, Mapping>) 
+            getServletContext().getAttribute(URL_MAPPINGS_KEY);
         
         String contextPath = request.getContextPath();
         String servletPath = request.getServletPath();
@@ -209,12 +222,18 @@ public class FrontServlet extends HttpServlet {
         out.println("        <div class='info'><span class='label'>Servlet:</span> <span class='value'>FrontServlet</span></div>");
         out.println("        <div class='info'><span class='label'>Framework:</span> <span class='value'>Mon Framework MVC v1.0</span></div>");
         out.println("        <div class='info'><span class='label'>Sprint:</span> <span class='value'>Sprint 1 - Configuration de base</span></div>");
+
+        if (urlMappings != null) {
+            out.println("        <div class='info'><span class='label'>URLs mappées:</span> <span class='value'>" + urlMappings.size() + "</span></div>");
+            out.println("        <p><em>✅ Mappings stockés dans ServletContext</em></p>");
+        }
+
         out.println("    </div>");
         out.println("</body>");
         out.println("</html>");
         
         System.out.println("FrontServlet - Requête MVC reçue: " + method + " " + requestURI);
-    }
+    } */
     
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) 
