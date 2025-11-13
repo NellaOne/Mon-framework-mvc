@@ -11,6 +11,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import mg.etu3273.framework.scanner.Mapping;
+import mg.etu3273.framework.scanner.PackageScanner;
 
 public class FrontServlet extends HttpServlet {    
     private static final String URL_MAPPINGS_KEY = "framework.urlMappings";
@@ -95,7 +97,26 @@ public class FrontServlet extends HttpServlet {
                     viewPath = "/" + viewPath;
                 }
 
+                Map<String, Object> data = modelView.getData();
+
+                if (data != null && !data.isEmpty()) {
+                    System.out.println("📦 Transfert de " + data.size() + " donnée(s) vers la JSP:");
+                    for (Map.Entry<String, Object> entry : data.entrySet()) {
+                        String key = entry.getKey();
+                        Object value = entry.getValue();
+                        
+                        // Placement dans la requête pour accès JSP via ${key}
+                        request.setAttribute(key, value);
+                        
+                        System.out.println("   - " + key + " = " + 
+                            (value != null ? value.getClass().getSimpleName() : "null"));
+                    }
+                } else {
+                    System.out.println("📦 Aucune donnée à transférer");
+                }
+
                 System.out.println("→ Dispatch vers: " + viewPath);
+
                 RequestDispatcher dispatcher = request.getRequestDispatcher(viewPath);
                 
                 if (dispatcher == null) {

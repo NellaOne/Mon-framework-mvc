@@ -1,4 +1,4 @@
-package mg.etu3273.framework;
+package mg.etu3273.framework.scanner;
 
 import java.lang.reflect.Method;
 
