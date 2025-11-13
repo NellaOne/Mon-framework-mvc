@@ -3,3 +3,4 @@ mg\etu3273\framework\FrontServlet.class
 mg\etu3273\framework\annotation\Controller.class
 mg\etu3273\framework\Mapping.class
 mg\etu3273\framework\PackageScanner.class
+mg\etu3273\framework\ModelView.class
