@@ -1,34 +1,99 @@
 package mg.etu3273.framework.scanner;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/**
- * Classe pour stocker le mapping entre une URL et une méthode de contrôleur
- * Sprint 2 bis
- */
+
 public class Mapping {
-    private String url;           // L'URL mappée (ex: "/test/list")
-    private String className;     // Nom complet de la classe (ex: "mg.etu3273.test.Test2")
-    private Method method;        // La méthode Java correspondante
     
-    // Constructeur vide
+    private String url;          
+    private String className;     
+    private Method method;        
+    
+    
+    private boolean hasDynamicParams;  
+    private String urlPattern;        
+    private List<String> paramNames;  
+    
     public Mapping() {
+        this.paramNames = new ArrayList<>();
     }
     
-    // Constructeur avec paramètres
     public Mapping(String url, String className, Method method) {
         this.url = url;
         this.className = className;
         this.method = method;
+        this.paramNames = new ArrayList<>();
+        
+        analyzeUrl();
     }
     
-    // Getters et Setters
+    private void analyzeUrl() {
+        if (url == null) {
+            this.hasDynamicParams = false;
+            return;
+        }
+        
+        this.hasDynamicParams = url.contains("{") && url.contains("}");
+        
+        if (this.hasDynamicParams) {
+            Pattern pattern = Pattern.compile("\\{([^}]+)\\}");
+            Matcher matcher = pattern.matcher(url);
+            
+            while (matcher.find()) {
+                String paramName = matcher.group(1);
+                paramNames.add(paramName);
+            }
+            
+            this.urlPattern = url.replaceAll("\\{[^}]+\\}", "([^/]+)");
+            
+            System.out.println("   🔧 URL dynamique détectée: " + url);
+            System.out.println("      Pattern regex: " + urlPattern);
+            System.out.println("      Paramètres: " + paramNames);
+        } else {
+            this.urlPattern = url;
+        }
+    }
+    
+    public boolean matches(String requestedUrl) {
+        if (!hasDynamicParams) {
+            return url.equals(requestedUrl);
+        } else {
+            Pattern pattern = Pattern.compile("^" + urlPattern + "$");
+            Matcher matcher = pattern.matcher(requestedUrl);
+            return matcher.matches();
+        }
+    }
+
+    public List<String> extractParamValues(String requestedUrl) {
+        List<String> values = new ArrayList<>();
+        
+        if (!hasDynamicParams) {
+            return values;
+        }
+        
+        Pattern pattern = Pattern.compile("^" + urlPattern + "$");
+        Matcher matcher = pattern.matcher(requestedUrl);
+        
+        if (matcher.matches()) {
+            for (int i = 1; i <= matcher.groupCount(); i++) {
+                values.add(matcher.group(i));
+            }
+        }
+        
+        return values;
+    }
+    
     public String getUrl() {
         return url;
     }
     
     public void setUrl(String url) {
         this.url = url;
+        analyzeUrl(); 
     }
     
     public String getClassName() {
@@ -47,12 +112,26 @@ public class Mapping {
         this.method = method;
     }
     
+    public boolean hasDynamicParams() {
+        return hasDynamicParams;
+    }
+    
+    public String getUrlPattern() {
+        return urlPattern;
+    }
+    
+    public List<String> getParamNames() {
+        return paramNames;
+    }
+    
     @Override
     public String toString() {
-        return "Mapping{" +
-                "url='" + url + '\'' +
-                ", className='" + className + '\'' +
-                ", method=" + (method != null ? method.getName() : "null") +
-                '}';
+        if (hasDynamicParams) {
+            return "Mapping{url='" + url + "' (dynamique), classe=" + className + 
+                   ", methode=" + method.getName() + ", params=" + paramNames + "}";
+        } else {
+            return "Mapping{url='" + url + "', classe=" + className + 
+                   ", methode=" + method.getName() + "}";
+        }
     }
 }

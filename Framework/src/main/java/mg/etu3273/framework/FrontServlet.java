@@ -3,6 +3,7 @@ package mg.etu3273.framework;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 
 import jakarta.servlet.RequestDispatcher;
@@ -25,6 +26,7 @@ public class FrontServlet extends HttpServlet {
             System.out.println("=== INITIALISATION FRONTSERVLET - SPRINT 4 ===");
             Map<String, Mapping> urlMappings = PackageScanner.scanAllClasspath();
             System.out.println("URLs enregistrées: " + urlMappings.size());
+
             ServletContext context = getServletContext();
             context.setAttribute(URL_MAPPINGS_KEY, urlMappings);
             System.out.println("✅ Mappings stockés dans ServletContext");
@@ -58,7 +60,7 @@ public class FrontServlet extends HttpServlet {
             throw new ServletException("URL Mappings non initialisé dans ServletContext");
         }
         
-        Mapping mapping = urlMappings.get(path);
+        Mapping mapping = findMapping(path, urlMappings);
 
         if (mapping != null) {
             handleControllerMethod(request, response, mapping);
@@ -76,8 +78,21 @@ public class FrontServlet extends HttpServlet {
             Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
 
             Method method = mapping.getMethod();
-            Object result = method.invoke(controllerInstance);
-            System.out.println("📦 Résultat: " + (result != null ? result.getClass().getSimpleName() : "null"));
+            Object result;
+
+            // Si la méthode a des paramètres, on les met à null pour l'instant
+            int paramCount = method.getParameterCount();
+            if (paramCount > 0) {
+                System.out.println("   ⚠️ Méthode avec " + paramCount + " paramètre(s) - valeurs null (Sprint 3-bis)");
+                Object[] nullParams = new Object[paramCount];
+                // ✅ Remplir avec null pour chaque paramètre
+                for (int i = 0; i < paramCount; i++) {
+                    nullParams[i] = null;
+                }
+                result = method.invoke(controllerInstance, nullParams);
+            } else {
+                result = method.invoke(controllerInstance);
+            }
 
             if (result == null) {
                 sendSimpleResponse(response, "La méthode a retourné NULL");
@@ -135,6 +150,35 @@ public class FrontServlet extends HttpServlet {
             e.printStackTrace();
             sendErrorResponse(response, e, mapping);
         }
+    }
+
+   
+    private Mapping findMapping(String requestedUrl, Map<String, Mapping> urlMappings) {
+        Mapping exactMatch = urlMappings.get(requestedUrl);
+        if (exactMatch != null) {
+            System.out.println("✅ Match exact trouvé: " + requestedUrl);
+            return exactMatch;
+        }
+        
+        System.out.println("🔍 Recherche de match dynamique pour: " + requestedUrl);
+        
+        for (Mapping mapping : urlMappings.values()) {
+            if (mapping.hasDynamicParams() && mapping.matches(requestedUrl)) {
+                System.out.println("✅ Match dynamique trouvé:");
+                System.out.println("   Pattern: " + mapping.getUrl());
+                System.out.println("   URL demandée: " + requestedUrl);
+                
+                List<String> values = mapping.extractParamValues(requestedUrl);
+                if (!values.isEmpty()) {
+                    System.out.println("   Valeurs extraites: " + values);
+                }
+                
+                return mapping;
+            }
+        }
+        
+        System.out.println("❌ Aucun mapping trouvé pour: " + requestedUrl);
+        return null;
     }
 
     private void sendSimpleResponse(HttpServletResponse response, String message) throws IOException {
