@@ -1,19 +1,12 @@
 package mg.etu3273.framework;
 
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
 import java.lang.reflect.Method;
-import java.util.List;
-import java.util.Map;
-
-import jakarta.servlet.RequestDispatcher;
-import jakarta.servlet.ServletContext;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import mg.etu3273.framework.scanner.Mapping;
-import mg.etu3273.framework.scanner.PackageScanner;
+import java.lang.reflect.Parameter;
+import java.util.*;
+import jakarta.servlet.*;
+import jakarta.servlet.http.*;
+import mg.etu3273.framework.scanner.*;
 
 public class FrontServlet extends HttpServlet {    
     private static final String URL_MAPPINGS_KEY = "framework.urlMappings";
@@ -23,14 +16,9 @@ public class FrontServlet extends HttpServlet {
     public void init() throws ServletException {
         defaultDispatcher = getServletContext().getNamedDispatcher("default");
         try {
-            System.out.println("=== INITIALISATION FRONTSERVLET - SPRINT 4 ===");
             Map<String, Mapping> urlMappings = PackageScanner.scanAllClasspath();
-            System.out.println("URLs enregistrées: " + urlMappings.size());
-
             ServletContext context = getServletContext();
             context.setAttribute(URL_MAPPINGS_KEY, urlMappings);
-            System.out.println("✅ Mappings stockés dans ServletContext");
-            System.out.println("=================================");
         } catch (Exception e) {
             throw new ServletException("Erreur lors du scan des controlleurs", e);
         }
@@ -40,14 +28,12 @@ public class FrontServlet extends HttpServlet {
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        System.out.println("📥 Requête: " + request.getMethod() + " " + path);
         /* if (path.equals("/") || path.isEmpty()) {
             handleMvcRequest(request, response);
             return;
         } */ 
         boolean resourceExists = getServletContext().getResource(path) != null;
         if (resourceExists) {
-            System.out.println("→ Ressource statique");
             defaultDispatcher.forward(request, response);
             return;
         }
@@ -63,96 +49,12 @@ public class FrontServlet extends HttpServlet {
         Mapping mapping = findMapping(path, urlMappings);
 
         if (mapping != null) {
-            handleControllerMethod(request, response, mapping);
+            handleControllerMethod(request, response, mapping, path);
         } else {
             handle404(request, response, path, urlMappings);
         }
     }
     
-
-    private void handleControllerMethod(HttpServletRequest request, HttpServletResponse response, Mapping mapping) throws IOException, ServletException {
-        response.setContentType("text/html;charset=UTF-8");
-        try {
-            System.out.println("🎯 SPRINT 4-bis - Exécution du contrôleur via Reflection:");
-            Class<?> clazz = Class.forName(mapping.getClassName());
-            Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
-
-            Method method = mapping.getMethod();
-            Object result;
-
-            // Si la méthode a des paramètres, on les met à null pour l'instant
-            int paramCount = method.getParameterCount();
-            if (paramCount > 0) {
-                System.out.println("   ⚠️ Méthode avec " + paramCount + " paramètre(s) - valeurs null (Sprint 3-bis)");
-                Object[] nullParams = new Object[paramCount];
-                // ✅ Remplir avec null pour chaque paramètre
-                for (int i = 0; i < paramCount; i++) {
-                    nullParams[i] = null;
-                }
-                result = method.invoke(controllerInstance, nullParams);
-            } else {
-                result = method.invoke(controllerInstance);
-            }
-
-            if (result == null) {
-                sendSimpleResponse(response, "La méthode a retourné NULL");
-             } else if (result instanceof String) {
-                System.out.println("→ Affichage String");
-                sendSimpleResponse(response, (String) result);
-                
-            } else if (result instanceof ModelView) {
-                ModelView modelView = (ModelView) result;
-                String viewPath = modelView.getView();
-
-                if (viewPath == null || viewPath.trim().isEmpty()) {
-                    throw new ServletException("ModelView.view est null ou vide");
-                }
-                
-                 if (!viewPath.startsWith("/")) {
-                    viewPath = "/" + viewPath;
-                }
-
-                Map<String, Object> data = modelView.getData();
-
-                if (data != null && !data.isEmpty()) {
-                    System.out.println("📦 Transfert de " + data.size() + " donnée(s) vers la JSP:");
-                    for (Map.Entry<String, Object> entry : data.entrySet()) {
-                        String key = entry.getKey();
-                        Object value = entry.getValue();
-                        
-                        // Placement dans la requête pour accès JSP via ${key}
-                        request.setAttribute(key, value);
-                        
-                        System.out.println("   - " + key + " = " + 
-                            (value != null ? value.getClass().getSimpleName() : "null"));
-                    }
-                } else {
-                    System.out.println("📦 Aucune donnée à transférer");
-                }
-
-                System.out.println("→ Dispatch vers: " + viewPath);
-
-                RequestDispatcher dispatcher = request.getRequestDispatcher(viewPath);
-                
-                if (dispatcher == null) {
-                    throw new ServletException("Impossible de trouver la vue: " + viewPath);
-                }
-                
-                dispatcher.forward(request, response);
-                
-            } else {
-                System.out.println("→ Affichage toString()");
-                sendSimpleResponse(response, result.toString());
-            }
-            
-        } catch(Exception e) {
-            System.err.println("❌ ERREUR: " + e.getMessage());
-            e.printStackTrace();
-            sendErrorResponse(response, e, mapping);
-        }
-    }
-
-   
     private Mapping findMapping(String requestedUrl, Map<String, Mapping> urlMappings) {
         Mapping exactMatch = urlMappings.get(requestedUrl);
         if (exactMatch != null) {
@@ -181,10 +83,165 @@ public class FrontServlet extends HttpServlet {
         return null;
     }
 
+
+    private void handleControllerMethod(HttpServletRequest request, HttpServletResponse response, Mapping mapping,
+                                       String requestedUrl) throws IOException, ServletException {
+        try {
+            System.out.println("🎯 Exécution: " + mapping.getClassName() + "." + mapping.getMethod().getName() + "()");
+            
+            // ✅ SPRINT 3-bis : Afficher info sur URL dynamique
+            if (mapping.hasDynamicParams()) {
+                System.out.println("   📌 URL dynamique: " + mapping.getUrl());
+                System.out.println("   📌 URL demandée: " + requestedUrl);
+                List<String> paramValues = mapping.extractParamValues(requestedUrl);
+                if (!paramValues.isEmpty()) {
+                    System.out.println("   📌 Valeurs extraites: " + paramValues);
+                }
+            }
+
+            Class<?> clazz = Class.forName(mapping.getClassName());
+            Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
+
+            Method method = mapping.getMethod();
+
+            Object[] methodArgs = prepareMethodArguments(method, request);
+             
+            Object result = method.invoke(controllerInstance, methodArgs);
+            
+            
+            /* Object result;
+
+            int paramCount = method.getParameterCount();
+            if (paramCount > 0) {
+                System.out.println("   ⚠️ Méthode avec " + paramCount + " paramètre(s) - valeurs null (Sprint 3-bis)");
+                Object[] nullParams = new Object[paramCount];
+                for (int i = 0; i < paramCount; i++) {
+                    nullParams[i] = null;
+                }
+                result = method.invoke(controllerInstance, nullParams);
+            } else {
+                result = method.invoke(controllerInstance);
+            } */
+
+            if (result == null) {
+                sendSimpleResponse(response, "La méthode a retourné NULL");
+             } else if (result instanceof String) {
+                sendSimpleResponse(response, (String) result);
+                
+            } else if (result instanceof ModelView) {
+                ModelView modelView = (ModelView) result;
+                String viewPath = modelView.getView();
+
+                if (viewPath == null || viewPath.trim().isEmpty()) {
+                    throw new ServletException("ModelView.view est null ou vide");
+                }
+                
+                 if (!viewPath.startsWith("/")) {
+                    viewPath = "/" + viewPath;
+                }
+
+                Map<String, Object> data = modelView.getData();
+
+                if (data != null && !data.isEmpty()) {
+                    for (Map.Entry<String, Object> entry : data.entrySet()) {
+                        String key = entry.getKey();
+                        Object value = entry.getValue();
+                        request.setAttribute(key, value);
+                    }
+                } else {
+                    System.out.println("📦 Aucune donnée à transférer");
+                }
+                RequestDispatcher dispatcher = request.getRequestDispatcher(viewPath);
+                if (dispatcher == null) {
+                    throw new ServletException("Impossible de trouver la vue: " + viewPath);
+                }
+                
+                dispatcher.forward(request, response);
+                
+            } else {
+                sendSimpleResponse(response, result.toString());
+            }
+            
+        } catch(Exception e) {
+            e.printStackTrace();
+            sendErrorResponse(response, e, mapping);
+        }
+    }
+
+
+    private Object[] prepareMethodArguments(Method method, HttpServletRequest request) {
+        Parameter[] parameters = method.getParameters();
+        
+        if (parameters.length == 0) {
+            return new Object[0];
+        }
+        
+        System.out.println("   🔧 SPRINT 6 - Injection des paramètres:");
+        Object[] args = new Object[parameters.length];
+        
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter param = parameters[i];
+            String paramName = param.getName(); 
+            Class<?> paramType = param.getType(); 
+
+            String paramValue = request.getParameter(paramName);
+            
+            if (paramValue != null) {
+                args[i] = convertParameter(paramValue, paramType);
+                System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = " + args[i] + " (depuis HTTP)");
+            } else {
+                args[i] = null;
+                System.out.println("      ⚠️ " + paramName + " (" + paramType.getSimpleName() + ") = null (pas dans request)");
+            }
+        }
+        
+        return args;
+    }
+    
+    private Object convertParameter(String value, Class<?> targetType) {
+        if (value == null) {
+            return null;
+        }
+        
+        try {
+            if (targetType == String.class) {
+                return value;
+            }
+            
+            if (targetType == Integer.class || targetType == int.class) {
+                return Integer.valueOf(value);
+            }
+            
+            if (targetType == Long.class || targetType == long.class) {
+                return Long.valueOf(value);
+            }
+            
+            if (targetType == Double.class || targetType == double.class) {
+                return Double.valueOf(value);
+            }
+            
+            if (targetType == Float.class || targetType == float.class) {
+                return Float.valueOf(value);
+            }
+            
+            if (targetType == Boolean.class || targetType == boolean.class) {
+                return Boolean.valueOf(value);
+            }
+            
+            System.out.println("      ⚠️ Type non supporté: " + targetType.getName() + ", retour String");
+            return value;
+            
+        } catch (NumberFormatException e) {
+            System.out.println("      ❌ Erreur conversion: " + value + " vers " + targetType.getSimpleName());
+            return null;
+        }
+    }
+    
+   
+
     private void sendSimpleResponse(HttpServletResponse response, String message) throws IOException {
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        
         out.println("<!DOCTYPE html>");
         out.println("<html>");
         out.println("<head><meta charset='UTF-8'><title>Framework MVC</title></head>");
@@ -198,7 +255,6 @@ public class FrontServlet extends HttpServlet {
     private void sendErrorResponse(HttpServletResponse response, Exception e, Mapping mapping) throws IOException {
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        
         out.println("<!DOCTYPE html>");
         out.println("<html>");
         out.println("<head><meta charset='UTF-8'><title>Erreur</title></head>");
@@ -222,7 +278,6 @@ public class FrontServlet extends HttpServlet {
         response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        
         out.println("<!DOCTYPE html>");
         out.println("<html>");
         out.println("<head><meta charset='UTF-8'><title>404</title></head>");

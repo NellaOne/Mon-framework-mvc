@@ -38,3 +38,4 @@ public class ModelView {
         return "ModelView{view='" + view + "', data=" + data.size() + " élément(s)}";
     }
 }
+
