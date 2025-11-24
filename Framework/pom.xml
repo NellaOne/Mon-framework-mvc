@@ -6,7 +6,6 @@
     
     <modelVersion>4.0.0</modelVersion>
     
-    <!-- Informations du projet framework - CORRIGÉ -->
     <groupId>mg.etu3273</groupId>
     <artifactId>Mon-framework-mvc</artifactId>
     <version>1.0-SNAPSHOT</version>
@@ -15,16 +14,13 @@
     <name>Mon Framework MVC</name>
     <description>Framework MVC custom inspiré de Spring MVC</description>
     
-    <!-- Propriétés -->
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     
-    <!-- Dépendances -->
     <dependencies>
-        <!-- API Servlet Jakarta pour Tomcat 10+ -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
@@ -32,7 +28,6 @@
             <scope>provided</scope>
         </dependency>
         
-        <!-- API JSP Jakarta (optionnel, si tu veux supporter les JSP plus tard) -->
         <dependency>
             <groupId>jakarta.servlet.jsp</groupId>
             <artifactId>jakarta.servlet.jsp-api</artifactId>
@@ -40,7 +35,6 @@
             <scope>provided</scope>
         </dependency>
         
-        <!-- Pour les tests unitaires (optionnel pour plus tard) -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -49,10 +43,8 @@
         </dependency>
     </dependencies>
     
-    <!-- Configuration de build -->
     <build>
         <plugins>
-            <!-- Plugin de compilation -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -64,7 +56,6 @@
                 </configuration>
             </plugin>
             
-            <!-- Plugin pour créer le JAR -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -83,7 +74,6 @@
                 </configuration>
             </plugin>
             
-            <!-- Plugin pour les sources (optionnel, utile pour le développement) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
@@ -99,7 +89,6 @@
             </plugin>
         </plugins>
         
-        <!-- Nom final du JAR généré -->
         <finalName>mon-framework-mvc-${project.version}</finalName>
     </build>
 </project>
