@@ -37,5 +37,9 @@ public class ModelView {
     public String toString() {
         return "ModelView{view='" + view + "', data=" + data.size() + " élément(s)}";
     }
+
+    public void setData(Map<String, Object> data) {
+        this.data = data;
+    }
 }
 

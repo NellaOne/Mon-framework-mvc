@@ -1,12 +1,20 @@
 package mg.etu3273.framework;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.*;
-import jakarta.servlet.*;
-import jakarta.servlet.http.*;
-import mg.etu3273.framework.scanner.*;
+import java.util.List;
+import java.util.Map;
+
+import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import mg.etu3273.framework.scanner.Mapping;
+import mg.etu3273.framework.scanner.PackageScanner;
 
 public class FrontServlet extends HttpServlet {    
     private static final String URL_MAPPINGS_KEY = "framework.urlMappings";
@@ -54,6 +62,84 @@ public class FrontServlet extends HttpServlet {
             handle404(request, response, path, urlMappings);
         }
     }
+    
+    private Object[] prepareMethodArguments(Method method, HttpServletRequest request) {
+        Parameter[] parameters = method.getParameters();
+        
+        if (parameters.length == 0) {
+            return new Object[0];
+        }
+        
+        System.out.println("   🔧 SPRINT 6 - Injection des paramètres:");
+        Object[] args = new Object[parameters.length];
+        
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter param = parameters[i];
+            String paramName = param.getName(); 
+            Class<?> paramType = param.getType(); 
+
+            String httpParamName = paramName; 
+            
+            if (param.isAnnotationPresent(mg.etu3273.framework.annotation.RequestParam.class)) {
+                mg.etu3273.framework.annotation.RequestParam requestParam = 
+                    param.getAnnotation(mg.etu3273.framework.annotation.RequestParam.class);
+                httpParamName = requestParam.value(); 
+            }
+            
+            String paramValue = request.getParameter(httpParamName);
+            
+            if (paramValue != null) {
+                args[i] = convertParameter(paramValue, paramType);
+                System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = " + args[i] + " (depuis HTTP)");
+            } else {
+                args[i] = null;
+                System.out.println("      ⚠️ " + paramName + " (" + paramType.getSimpleName() + ") = null (pas dans request)");
+            }
+        }
+        
+        return args;
+    }
+
+    private Object convertParameter(String value, Class<?> targetType) {
+        if (value == null) {
+            return null;
+        }
+        
+        try {
+            if (targetType == String.class) {
+                return value;
+            }
+            
+            if (targetType == Integer.class || targetType == int.class) {
+                return Integer.valueOf(value);
+            }
+            
+            if (targetType == Long.class || targetType == long.class) {
+                return Long.valueOf(value);
+            }
+            
+            if (targetType == Double.class || targetType == double.class) {
+                return Double.valueOf(value);
+            }
+            
+            if (targetType == Float.class || targetType == float.class) {
+                return Float.valueOf(value);
+            }
+            
+            if (targetType == Boolean.class || targetType == boolean.class) {
+                return Boolean.valueOf(value);
+            }
+            
+            System.out.println("      ⚠️ Type non supporté: " + targetType.getName() + ", retour String");
+            return value;
+            
+        } catch (NumberFormatException e) {
+            System.out.println("      ❌ Erreur conversion: " + value + " vers " + targetType.getSimpleName());
+            return null;
+        }
+    }
+    
+   
     
     private Mapping findMapping(String requestedUrl, Map<String, Mapping> urlMappings) {
         Mapping exactMatch = urlMappings.get(requestedUrl);
@@ -169,75 +255,9 @@ public class FrontServlet extends HttpServlet {
     }
 
 
-    private Object[] prepareMethodArguments(Method method, HttpServletRequest request) {
-        Parameter[] parameters = method.getParameters();
-        
-        if (parameters.length == 0) {
-            return new Object[0];
-        }
-        
-        System.out.println("   🔧 SPRINT 6 - Injection des paramètres:");
-        Object[] args = new Object[parameters.length];
-        
-        for (int i = 0; i < parameters.length; i++) {
-            Parameter param = parameters[i];
-            String paramName = param.getName(); 
-            Class<?> paramType = param.getType(); 
-
-            String paramValue = request.getParameter(paramName);
-            
-            if (paramValue != null) {
-                args[i] = convertParameter(paramValue, paramType);
-                System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = " + args[i] + " (depuis HTTP)");
-            } else {
-                args[i] = null;
-                System.out.println("      ⚠️ " + paramName + " (" + paramType.getSimpleName() + ") = null (pas dans request)");
-            }
-        }
-        
-        return args;
-    }
     
-    private Object convertParameter(String value, Class<?> targetType) {
-        if (value == null) {
-            return null;
-        }
-        
-        try {
-            if (targetType == String.class) {
-                return value;
-            }
-            
-            if (targetType == Integer.class || targetType == int.class) {
-                return Integer.valueOf(value);
-            }
-            
-            if (targetType == Long.class || targetType == long.class) {
-                return Long.valueOf(value);
-            }
-            
-            if (targetType == Double.class || targetType == double.class) {
-                return Double.valueOf(value);
-            }
-            
-            if (targetType == Float.class || targetType == float.class) {
-                return Float.valueOf(value);
-            }
-            
-            if (targetType == Boolean.class || targetType == boolean.class) {
-                return Boolean.valueOf(value);
-            }
-            
-            System.out.println("      ⚠️ Type non supporté: " + targetType.getName() + ", retour String");
-            return value;
-            
-        } catch (NumberFormatException e) {
-            System.out.println("      ❌ Erreur conversion: " + value + " vers " + targetType.getSimpleName());
-            return null;
-        }
-    }
     
-   
+    
 
     private void sendSimpleResponse(HttpServletResponse response, String message) throws IOException {
         response.setContentType("text/html;charset=UTF-8");
