@@ -63,14 +63,17 @@ public class FrontServlet extends HttpServlet {
         }
     }
     
-    private Object[] prepareMethodArguments(Method method, HttpServletRequest request) {
+    private Object[] prepareMethodArguments(Method method, HttpServletRequest request, 
+                                           Mapping mapping, String requestedUrl) {
         Parameter[] parameters = method.getParameters();
         
         if (parameters.length == 0) {
             return new Object[0];
         }
+
+        List<String> urlParamNames = mapping.getParamNames();
+        List<String> urlParamValues = mapping.extractParamValues(requestedUrl);
         
-        System.out.println("   🔧 SPRINT 6 - Injection des paramètres:");
         Object[] args = new Object[parameters.length];
         
         for (int i = 0; i < parameters.length; i++) {
@@ -78,15 +81,33 @@ public class FrontServlet extends HttpServlet {
             String paramName = param.getName(); 
             Class<?> paramType = param.getType(); 
 
-            String httpParamName = paramName; 
+            // String httpParamName = paramName; 
+             String paramValue = null;
+            String source = "";
             
             if (param.isAnnotationPresent(mg.etu3273.framework.annotation.RequestParam.class)) {
                 mg.etu3273.framework.annotation.RequestParam requestParam = 
                     param.getAnnotation(mg.etu3273.framework.annotation.RequestParam.class);
-                httpParamName = requestParam.value(); 
+                String httpParamName = requestParam.value(); 
+                paramValue = request.getParameter(httpParamName);
+                source = "@RequestParam";
+                System.out.println("      🏷️ @RequestParam: cherche '" + httpParamName + "' pour '" + paramName + "'");
+            }
+            else if (urlParamNames.contains(paramName)) {
+                int paramIndex = urlParamNames.indexOf(paramName);
+                if (paramIndex < urlParamValues.size()) {
+                    paramValue = urlParamValues.get(paramIndex);
+                    source = "URL {" + paramName + "}";
+                    System.out.println("      🌐 URL {}: extrait '{" + paramName + "}' = " + paramValue);
+                }
+            }
+
+            else {
+                paramValue = request.getParameter(paramName);
+                source = "HTTP param";
             }
             
-            String paramValue = request.getParameter(httpParamName);
+            // String paramValue = request.getParameter(httpParamName);
             
             if (paramValue != null) {
                 args[i] = convertParameter(paramValue, paramType);
@@ -190,7 +211,7 @@ public class FrontServlet extends HttpServlet {
 
             Method method = mapping.getMethod();
 
-            Object[] methodArgs = prepareMethodArguments(method, request);
+            Object[] methodArgs = prepareMethodArguments(method, request, mapping, requestedUrl);
              
             Object result = method.invoke(controllerInstance, methodArgs);
             
@@ -211,7 +232,8 @@ public class FrontServlet extends HttpServlet {
 
             if (result == null) {
                 sendSimpleResponse(response, "La méthode a retourné NULL");
-             } else if (result instanceof String) {
+
+            } else if (result instanceof String) {
                 sendSimpleResponse(response, (String) result);
                 
             } else if (result instanceof ModelView) {
@@ -253,12 +275,7 @@ public class FrontServlet extends HttpServlet {
             sendErrorResponse(response, e, mapping);
         }
     }
-
-
     
-    
-    
-
     private void sendSimpleResponse(HttpServletResponse response, String message) throws IOException {
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
