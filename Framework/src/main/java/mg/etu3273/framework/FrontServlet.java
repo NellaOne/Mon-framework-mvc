@@ -24,7 +24,7 @@ public class FrontServlet extends HttpServlet {
     public void init() throws ServletException {
         defaultDispatcher = getServletContext().getNamedDispatcher("default");
         try {
-            Map<String, Mapping> urlMappings = PackageScanner.scanAllClasspath();
+            Map<String,  List<Mapping>> urlMappings = PackageScanner.scanAllClasspath();
             ServletContext context = getServletContext();
             context.setAttribute(URL_MAPPINGS_KEY, urlMappings);
         } catch (Exception e) {
@@ -32,10 +32,11 @@ public class FrontServlet extends HttpServlet {
         }
     }
     
-   @Override
+    @Override
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         String path = request.getRequestURI().substring(request.getContextPath().length());
+        String httpMethod = request.getMethod(); 
         /* if (path.equals("/") || path.isEmpty()) {
             handleMvcRequest(request, response);
             return;
@@ -47,19 +48,19 @@ public class FrontServlet extends HttpServlet {
         }
 
          @SuppressWarnings("unchecked")
-        Map<String, Mapping> urlMappings = (Map<String, Mapping>) 
+        Map<String, List<Mapping>> urlMappings = (Map<String, List<Mapping>>) 
             getServletContext().getAttribute(URL_MAPPINGS_KEY);
         
         if (urlMappings == null) {
             throw new ServletException("URL Mappings non initialisé dans ServletContext");
         }
         
-        Mapping mapping = findMapping(path, urlMappings);
+        Mapping mapping = findMapping(path, httpMethod, urlMappings);
 
         if (mapping != null) {
             handleControllerMethod(request, response, mapping, path);
         } else {
-            handle404(request, response, path, urlMappings);
+            handle404(request, response, path, httpMethod, urlMappings);
         }
     }
     
@@ -82,7 +83,7 @@ public class FrontServlet extends HttpServlet {
             Class<?> paramType = param.getType(); 
 
             // String httpParamName = paramName; 
-             String paramValue = null;
+            String paramValue = null;
             String source = "";
             
             if (param.isAnnotationPresent(mg.etu3273.framework.annotation.RequestParam.class)) {
@@ -90,15 +91,15 @@ public class FrontServlet extends HttpServlet {
                     param.getAnnotation(mg.etu3273.framework.annotation.RequestParam.class);
                 String httpParamName = requestParam.value(); 
                 paramValue = request.getParameter(httpParamName);
-                source = "@RequestParam";
-                System.out.println("      🏷️ @RequestParam: cherche '" + httpParamName + "' pour '" + paramName + "'");
+                // source = "@RequestParam";
+                source = "@RequestParam(\"" + httpParamName + "\")";
             }
+
             else if (urlParamNames.contains(paramName)) {
                 int paramIndex = urlParamNames.indexOf(paramName);
                 if (paramIndex < urlParamValues.size()) {
                     paramValue = urlParamValues.get(paramIndex);
                     source = "URL {" + paramName + "}";
-                    System.out.println("      🌐 URL {}: extrait '{" + paramName + "}' = " + paramValue);
                 }
             }
 
@@ -122,36 +123,22 @@ public class FrontServlet extends HttpServlet {
     }
 
     private Object convertParameter(String value, Class<?> targetType) {
-        if (value == null) {
-            return null;
-        }
+        if (value == null) return null;
         
         try {
-            if (targetType == String.class) {
-                return value;
-            }
+            if (targetType == String.class) return value;
             
-            if (targetType == Integer.class || targetType == int.class) {
-                return Integer.valueOf(value);
-            }
+            if (targetType == Integer.class || targetType == int.class) return Integer.valueOf(value);
+        
+            if (targetType == Long.class || targetType == long.class) return Long.valueOf(value);
+        
             
-            if (targetType == Long.class || targetType == long.class) {
-                return Long.valueOf(value);
-            }
+            if (targetType == Double.class || targetType == double.class) return Double.valueOf(value);
             
-            if (targetType == Double.class || targetType == double.class) {
-                return Double.valueOf(value);
-            }
+            if (targetType == Float.class || targetType == float.class) return Float.valueOf(value);
             
-            if (targetType == Float.class || targetType == float.class) {
-                return Float.valueOf(value);
-            }
+            if (targetType == Boolean.class || targetType == boolean.class) return Boolean.valueOf(value);
             
-            if (targetType == Boolean.class || targetType == boolean.class) {
-                return Boolean.valueOf(value);
-            }
-            
-            System.out.println("      ⚠️ Type non supporté: " + targetType.getName() + ", retour String");
             return value;
             
         } catch (NumberFormatException e) {
@@ -160,32 +147,34 @@ public class FrontServlet extends HttpServlet {
         }
     }
     
-   
-    
-    private Mapping findMapping(String requestedUrl, Map<String, Mapping> urlMappings) {
-        Mapping exactMatch = urlMappings.get(requestedUrl);
-        if (exactMatch != null) {
-            System.out.println("✅ Match exact trouvé: " + requestedUrl);
-            return exactMatch;
+    private Mapping findMapping(String requestedUrl, String httpMethod, Map<String, List<Mapping>> urlMappings) {
+        List<Mapping> candidates = urlMappings.get(requestedUrl);
+        if (candidates != null) {
+            for (Mapping m : candidates) {
+                if (m.supportsHttpMethod(httpMethod)) {
+                    return m;
+                }
+            }
+
+            return null;
         }
-        
+
         System.out.println("🔍 Recherche de match dynamique pour: " + requestedUrl);
         
-        for (Mapping mapping : urlMappings.values()) {
-            if (mapping.hasDynamicParams() && mapping.matches(requestedUrl)) {
-                System.out.println("✅ Match dynamique trouvé:");
-                System.out.println("   Pattern: " + mapping.getUrl());
-                System.out.println("   URL demandée: " + requestedUrl);
-                
-                List<String> values = mapping.extractParamValues(requestedUrl);
-                if (!values.isEmpty()) {
-                    System.out.println("   Valeurs extraites: " + values);
+        for (Map.Entry<String, List<Mapping>> entry : urlMappings.entrySet()) {
+            for (Mapping mapping : entry.getValue()) {
+                if (mapping.hasDynamicParams() && mapping.matches(requestedUrl)) {
+                    if (mapping.supportsHttpMethod(httpMethod)) {                    
+                        List<String> values = mapping.extractParamValues(requestedUrl);
+                        if (!values.isEmpty()) {
+                            System.out.println("   Valeurs extraites: " + values);
+                        }
+
+                        return mapping;
+                    }
                 }
-                
-                return mapping;
             }
         }
-        
         System.out.println("❌ Aucun mapping trouvé pour: " + requestedUrl);
         return null;
     }
@@ -309,12 +298,13 @@ public class FrontServlet extends HttpServlet {
 
     private void handle404(HttpServletRequest request, 
                           HttpServletResponse response, 
-                          String path,
-                          Map<String, Mapping> urlMappings) throws IOException {
+                          String path, String httpMethod,
+                          Map<String, List<Mapping>> urlMappings) throws IOException {
         
         response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         response.setContentType("text/html;charset=UTF-8");
         PrintWriter out = response.getWriter();
+
         out.println("<!DOCTYPE html>");
         out.println("<html>");
         out.println("<head><meta charset='UTF-8'><title>404</title></head>");
@@ -323,12 +313,23 @@ public class FrontServlet extends HttpServlet {
         out.println("<p>L'URL <strong>" + path + "</strong> n'est pas mappée.</p>");
         out.println("<h3>URLs disponibles:</h3>");
         out.println("<ul>");
-        for (String url : urlMappings.keySet()) {
-            Mapping m = urlMappings.get(url);
-            out.println("<li><a href='" + request.getContextPath() + url + "'>" + url + "</a> ");
-            out.println("→ " + m.getClassName() + "." + m.getMethod().getName() + "()</li>");
+
+        for (Map.Entry<String, List<Mapping>> entry : urlMappings.entrySet()) {
+            String url = entry.getKey();
+            List<Mapping> mappings = entry.getValue();
+
+            out.println("<li>");
+            out.println("<a href='" + request.getContextPath() + url + "'>" + url + "</a>");
+
+            for (Mapping m : mappings) {
+                String method = m.getHttpMethod() != null ? m.getHttpMethod() : "ALL";
+                out.println("<span class='method " + method + "'>" + method + "</span>");
+            }
+            out.println("</li>");
         }
+        
         out.println("</ul>");
+        out.println("</div>");
         out.println("</body>");
         out.println("</html>");
     }

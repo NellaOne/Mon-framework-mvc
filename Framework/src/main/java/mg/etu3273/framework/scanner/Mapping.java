@@ -11,7 +11,8 @@ public class Mapping {
     
     private String url;          
     private String className;     
-    private Method method;        
+    private Method method;    
+     private String httpMethod;     
     
     
     private boolean hasDynamicParams;  
@@ -26,11 +27,20 @@ public class Mapping {
         this.url = url;
         this.className = className;
         this.method = method;
-        this.paramNames = new ArrayList<>();
+        this.httpMethod = null;
         
         analyzeUrl();
     }
     
+     public Mapping(String url, String className, Method method, String httpMethod) {
+        this.url = url;
+        this.className = className;
+        this.method = method;
+        this.httpMethod = httpMethod;
+        this.paramNames = new ArrayList<>();
+        analyzeUrl();
+    }
+
     private void analyzeUrl() {
         if (url == null) {
             this.hasDynamicParams = false;
@@ -86,6 +96,13 @@ public class Mapping {
         
         return values;
     }
+
+    public boolean supportsHttpMethod(String requestMethod) {
+        if (this.httpMethod == null) {
+            return true;
+        }
+        return this.httpMethod.equalsIgnoreCase(requestMethod);
+    }
     
     public String getUrl() {
         return url;
@@ -111,6 +128,14 @@ public class Mapping {
     public void setMethod(Method method) {
         this.method = method;
     }
+
+    public String getHttpMethod() {
+        return httpMethod;
+    }
+
+    public void setHttpMethod(String httpMethod) {
+        this.httpMethod = httpMethod;
+    }
     
     public boolean hasDynamicParams() {
         return hasDynamicParams;
@@ -126,12 +151,24 @@ public class Mapping {
     
     @Override
     public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Mapping{");
+        sb.append("url='").append(url).append("'");
+        
         if (hasDynamicParams) {
-            return "Mapping{url='" + url + "' (dynamique), classe=" + className + 
-                   ", methode=" + method.getName() + ", params=" + paramNames + "}";
-        } else {
-            return "Mapping{url='" + url + "', classe=" + className + 
-                   ", methode=" + method.getName() + "}";
+            sb.append(" (dynamique, params=").append(paramNames).append(")");
         }
+        
+        if (httpMethod != null) {
+            sb.append(", httpMethod=").append(httpMethod);
+        } else {
+            sb.append(", httpMethod=ALL");
+        }
+        
+        sb.append(", classe=").append(className);
+        sb.append(", methode=").append(method.getName());
+        sb.append("}");
+        
+        return sb.toString();
     }
 }
