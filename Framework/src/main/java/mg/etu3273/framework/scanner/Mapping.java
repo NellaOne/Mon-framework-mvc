@@ -1,10 +1,14 @@
 package mg.etu3273.framework.scanner;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 
 public class Mapping {
@@ -23,16 +27,13 @@ public class Mapping {
         this.paramNames = new ArrayList<>();
     }
     
+    
     public Mapping(String url, String className, Method method) {
-        this.url = url;
-        this.className = className;
-        this.method = method;
-        this.httpMethod = null;
-        
-        analyzeUrl();
+        this(url, className, method, null);
     }
     
-     public Mapping(String url, String className, Method method, String httpMethod) {
+
+    public Mapping(String url, String className, Method method, String httpMethod) {
         this.url = url;
         this.className = className;
         this.method = method;
@@ -41,6 +42,7 @@ public class Mapping {
         analyzeUrl();
     }
 
+    // mi-analyze url mi detecter params dynamiques
     private void analyzeUrl() {
         if (url == null) {
             this.hasDynamicParams = false;
@@ -59,15 +61,12 @@ public class Mapping {
             }
             
             this.urlPattern = url.replaceAll("\\{[^}]+\\}", "([^/]+)");
-            
-            System.out.println("   🔧 URL dynamique détectée: " + url);
-            System.out.println("      Pattern regex: " + urlPattern);
-            System.out.println("      Paramètres: " + paramNames);
         } else {
             this.urlPattern = url;
         }
     }
     
+    // mi correspondre @pattern ve lay url
     public boolean matches(String requestedUrl) {
         if (!hasDynamicParams) {
             return url.equals(requestedUrl);
@@ -78,6 +77,7 @@ public class Mapping {
         }
     }
 
+    // mi extraire valeurs anle params avy @url
     public List<String> extractParamValues(String requestedUrl) {
         List<String> values = new ArrayList<>();
         
@@ -97,13 +97,130 @@ public class Mapping {
         return values;
     }
 
+    // supporter mapping methode http ?
     public boolean supportsHttpMethod(String requestMethod) {
         if (this.httpMethod == null) {
             return true;
         }
         return this.httpMethod.equalsIgnoreCase(requestMethod);
     }
+
+    public static Mapping findMapping(String requestedUrl, String httpMethod, Map<String, List<Mapping>> urlMappings) {
+        List<Mapping> candidates = urlMappings.get(requestedUrl);
+        if (candidates != null) {
+            for (Mapping m : candidates) {
+                if (m.supportsHttpMethod(httpMethod)) {
+                    return m;
+                }
+            }
+            return null;
+        }
+
+        System.out.println("🔍 Recherche de match dynamique pour: " + requestedUrl);
+        
+        for (Map.Entry<String, List<Mapping>> entry : urlMappings.entrySet()) {
+            for (Mapping mapping : entry.getValue()) {
+                if (mapping.hasDynamicParams() && mapping.matches(requestedUrl)) {
+                    if (mapping.supportsHttpMethod(httpMethod)) {                    
+                        List<String> values = mapping.extractParamValues(requestedUrl);
+                        if (!values.isEmpty()) {
+                            System.out.println("   Valeurs extraites: " + values);
+                        }
+
+                        return mapping;
+                    }
+                }
+            }
+        }
+        System.out.println("❌ Aucun mapping trouvé pour: " + requestedUrl);
+        return null;
+    }
+
     
+     public  Object[] prepareMethodArguments(HttpServletRequest request, String requestedUrl) {
+        Parameter[] parameters = method.getParameters();
+        
+        if (parameters.length == 0) {
+            return new Object[0];
+        }
+
+        List<String> urlParamNames = getParamNames();
+        List<String> urlParamValues = extractParamValues(requestedUrl);
+        
+        Object[] args = new Object[parameters.length];
+        
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter param = parameters[i];
+            String paramName = param.getName(); 
+            Class<?> paramType = param.getType(); 
+
+            // String httpParamName = paramName; 
+            String paramValue = null;
+            String source = "";
+            
+            if (param.isAnnotationPresent(mg.etu3273.framework.annotation.RequestParam.class)) {
+                mg.etu3273.framework.annotation.RequestParam requestParam = 
+                    param.getAnnotation(mg.etu3273.framework.annotation.RequestParam.class);
+                String httpParamName = requestParam.value(); 
+                paramValue = request.getParameter(httpParamName);
+                // source = "@RequestParam";
+                source = "@RequestParam(\"" + httpParamName + "\")";
+            }
+
+            else if (urlParamNames.contains(paramName)) {
+                int paramIndex = urlParamNames.indexOf(paramName);
+                if (paramIndex < urlParamValues.size()) {
+                    paramValue = urlParamValues.get(paramIndex);
+                    source = "URL {" + paramName + "}";
+                }
+            }
+
+            else {
+                paramValue = request.getParameter(paramName);
+                source = "HTTP param";
+            }
+            
+            // String paramValue = request.getParameter(httpParamName);
+            
+            if (paramValue != null) {
+                args[i] = convertParameter(paramValue, paramType);
+                System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = " + args[i] + " (depuis HTTP)");
+            } else {
+                args[i] = null;
+                System.out.println("      ⚠️ " + paramName + " (" + paramType.getSimpleName() + ") = null (pas dans request)");
+            }
+        }
+        
+        return args;
+    }
+
+
+       private Object convertParameter(String value, Class<?> targetType) {
+        if (value == null) return null;
+        
+        try {
+            if (targetType == String.class) return value;
+            
+            if (targetType == Integer.class || targetType == int.class) return Integer.valueOf(value);
+        
+            if (targetType == Long.class || targetType == long.class) return Long.valueOf(value);
+        
+            
+            if (targetType == Double.class || targetType == double.class) return Double.valueOf(value);
+            
+            if (targetType == Float.class || targetType == float.class) return Float.valueOf(value);
+            
+            if (targetType == Boolean.class || targetType == boolean.class) return Boolean.valueOf(value);
+            
+            return value;
+            
+        } catch (NumberFormatException e) {
+            System.out.println("      ❌ Erreur conversion: " + value + " vers " + targetType.getSimpleName());
+            return null;
+        }
+    }
+
+
     public String getUrl() {
         return url;
     }
