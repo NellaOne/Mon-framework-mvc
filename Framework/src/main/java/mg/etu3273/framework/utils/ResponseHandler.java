@@ -84,11 +84,12 @@ public class ResponseHandler {
     public static void forwardToView(HttpServletRequest request, HttpServletResponse response, 
                               ModelView modelView) throws ServletException, IOException {
         String viewPath = modelView.getView();
+        
         if (viewPath == null || viewPath.trim().isEmpty()) {
             throw new ServletException("ModelView.view est null ou vide");
         }
         if (!viewPath.startsWith("/")) {
-            viewPath = "/" + viewPath;
+            viewPath = "/WEB-INF/" + viewPath;
         }
 
         Map<String, Object> data = modelView.getData();

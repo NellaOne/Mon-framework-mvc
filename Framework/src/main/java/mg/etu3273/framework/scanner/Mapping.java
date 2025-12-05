@@ -2,7 +2,10 @@ package mg.etu3273.framework.scanner;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -31,6 +34,8 @@ public class Mapping {
     public Mapping(String url, String className, Method method) {
         this(url, className, method, null);
     }
+
+    
     
 
     public Mapping(String url, String className, Method method, String httpMethod) {
@@ -137,7 +142,7 @@ public class Mapping {
     }
 
     
-     public  Object[] prepareMethodArguments(HttpServletRequest request, String requestedUrl) {
+     public Object[] prepareMethodArguments(HttpServletRequest request, String requestedUrl) {
         Parameter[] parameters = method.getParameters();
         
         if (parameters.length == 0) {
@@ -151,9 +156,17 @@ public class Mapping {
         
         for (int i = 0; i < parameters.length; i++) {
             Parameter param = parameters[i];
-            String paramName = param.getName(); 
             Class<?> paramType = param.getType(); 
 
+            if (isRequestParametersMap(param)) {
+                args[i] = buildParametersMap(request);
+                System.out.println("      ✅ Map<String, Object> = " + 
+                                 ((Map<?, ?>)args[i]).size() + " paramètre(s) (SPRINT 8)");
+                continue;
+            }
+
+
+            String paramName = param.getName(); 
             // String httpParamName = paramName; 
             String paramValue = null;
             String source = "";
@@ -194,8 +207,61 @@ public class Mapping {
         return args;
     }
 
+    private boolean isRequestParametersMap(Parameter param) {
+        // Vérifier que c'est une Map
+        if (!Map.class.isAssignableFrom(param.getType())) {
+            return false;
+        }
 
-       private Object convertParameter(String value, Class<?> targetType) {
+        // Vérifier les types génériques : Map<String, Object>
+        Type genericType = param.getParameterizedType();
+        if (!(genericType instanceof ParameterizedType)) {
+            return false;
+        }
+
+        ParameterizedType parameterizedType = (ParameterizedType) genericType;
+        Type[] typeArguments = parameterizedType.getActualTypeArguments();
+
+        if (typeArguments.length != 2) {
+            return false;
+        }
+
+        // Clé doit être String
+        boolean keyIsString = typeArguments[0].equals(String.class);
+        // Valeur doit être Object
+        boolean valueIsObject = typeArguments[1].equals(Object.class);
+
+        return keyIsString && valueIsObject;
+    }
+    
+    private Map<String, Object> buildParametersMap(HttpServletRequest request) {
+        Map<String, Object> parametersMap = new HashMap<>();
+        
+        // Récupérer tous les noms de paramètres
+        Map<String, String[]> parameterMap = request.getParameterMap();
+        
+        for (Map.Entry<String, String[]> entry : parameterMap.entrySet()) {
+            String paramName = entry.getKey();
+            String[] paramValues = entry.getValue();
+            
+            if (paramValues == null || paramValues.length == 0) {
+                parametersMap.put(paramName, null);
+            } else if (paramValues.length == 1) {
+                // Un seul paramètre : stocker directement la valeur
+                parametersMap.put(paramName, paramValues[0]);
+            } else {
+                // Plusieurs valeurs (checkboxes) : stocker le tableau
+                parametersMap.put(paramName, paramValues);
+            }
+        }
+        
+        System.out.println("      📦 Map construite : " + parametersMap.keySet());
+        
+        return parametersMap;
+    }
+
+
+    private Object convertParameter(String value, Class<?> targetType) {
         if (value == null) return null;
         
         try {
