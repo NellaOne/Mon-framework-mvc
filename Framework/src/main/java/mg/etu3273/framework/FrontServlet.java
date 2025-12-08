@@ -22,6 +22,7 @@ public class FrontServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         defaultDispatcher = getServletContext().getNamedDispatcher("default");
+        
         try {
             Map<String,  List<Mapping>> urlMappings = PackageScanner.scanAllClasspath();
             getServletContext().setAttribute(URL_MAPPINGS_KEY, urlMappings);
@@ -34,7 +35,12 @@ public class FrontServlet extends HttpServlet {
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         String path = request.getRequestURI().substring(request.getContextPath().length());
+          /* if (path.equals("/") || path.isEmpty()) {
+            handleMvcRequest(request, response);
+            return;
+        } */ 
         String httpMethod = request.getMethod(); 
+
         if (getServletContext().getResource(path) != null) {
             defaultDispatcher.forward(request, response);
             return;

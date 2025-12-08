@@ -84,11 +84,12 @@ public class ResponseHandler {
     public static void forwardToView(HttpServletRequest request, HttpServletResponse response, 
                               ModelView modelView) throws ServletException, IOException {
         String viewPath = modelView.getView();
+        
         if (viewPath == null || viewPath.trim().isEmpty()) {
             throw new ServletException("ModelView.view est null ou vide");
         }
         if (!viewPath.startsWith("/")) {
-            viewPath = "/" + viewPath;
+            viewPath = "/WEB-INF/views/" + viewPath;
         }
 
         Map<String, Object> data = modelView.getData();
@@ -96,6 +97,8 @@ public class ResponseHandler {
             for (Map.Entry<String, Object> entry : data.entrySet()) {
                 request.setAttribute(entry.getKey(), entry.getValue());
             }
+        } else {
+                    System.out.println("📦 Aucune donnée à transférer");
         }
 
         RequestDispatcher dispatcher = request.getRequestDispatcher(viewPath);
