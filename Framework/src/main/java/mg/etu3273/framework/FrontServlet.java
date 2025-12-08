@@ -35,6 +35,10 @@ public class FrontServlet extends HttpServlet {
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         String path = request.getRequestURI().substring(request.getContextPath().length());
+          /* if (path.equals("/") || path.isEmpty()) {
+            handleMvcRequest(request, response);
+            return;
+        } */ 
         String httpMethod = request.getMethod(); 
 
         if (getServletContext().getResource(path) != null) {

@@ -32,9 +32,13 @@ public class Mapping {
     
     
     public Mapping(String url, String className, Method method) {
-        this(url, className, method, null);
+        this.url = url;
+        this.className = className;
+        this.method = method;
+        this.paramNames = new ArrayList<>();
+        
+        analyzeUrl();
     }
-
     
     
 
@@ -111,6 +115,7 @@ public class Mapping {
     }
 
     public static Mapping findMapping(String requestedUrl, String httpMethod, Map<String, List<Mapping>> urlMappings) {
+
         List<Mapping> candidates = urlMappings.get(requestedUrl);
         if (candidates != null) {
             for (Mapping m : candidates) {
