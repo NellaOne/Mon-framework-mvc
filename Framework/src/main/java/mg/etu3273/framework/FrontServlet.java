@@ -35,10 +35,7 @@ public class FrontServlet extends HttpServlet {
     protected void service(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
         String path = request.getRequestURI().substring(request.getContextPath().length());
-          /* if (path.equals("/") || path.isEmpty()) {
-            handleMvcRequest(request, response);
-            return;
-        } */ 
+     
         String httpMethod = request.getMethod(); 
 
         if (getServletContext().getResource(path) != null) {
@@ -55,6 +52,10 @@ public class FrontServlet extends HttpServlet {
         }
         
         Mapping mapping = Mapping.findMapping(path, httpMethod, urlMappings);
+           if (path.equals("/") || path.isEmpty()) {
+            handleControllerMethod(request, response, mapping, path);
+            return;
+        } 
 
         if (mapping != null) {
             handleControllerMethod(request, response, mapping, path);

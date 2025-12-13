@@ -162,16 +162,22 @@ public class Mapping {
         for (int i = 0; i < parameters.length; i++) {
             Parameter param = parameters[i];
             Class<?> paramType = param.getType(); 
+            String paramName = param.getName(); 
 
             if (isRequestParametersMap(param)) {
                 args[i] = buildParametersMap(request);
-                System.out.println("      ✅ Map<String, Object> = " + 
+                System.out.println("      ✅ " + paramName + " Map<String, Object> = " + 
                                  ((Map<?, ?>)args[i]).size() + " paramètre(s) (SPRINT 8)");
                 continue;
             }
 
+            if (isCustomObject(paramType)) {
+                args[i] = bindObject(paramType, paramName, request);
+                System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = objet bindé (SPRINT 8-bis)");
+                continue;
+            }
 
-            String paramName = param.getName(); 
+      
             // String httpParamName = paramName; 
             String paramValue = null;
             String source = "";
@@ -202,8 +208,7 @@ public class Mapping {
             
             if (paramValue != null) {
                 args[i] = convertParameter(paramValue, paramType);
-                System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = " + args[i] + " (depuis HTTP)");
-            } else {
+                System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = " + args[i] + " (depuis " + source + ")");
                 args[i] = null;
                 System.out.println("      ⚠️ " + paramName + " (" + paramType.getSimpleName() + ") = null (pas dans request)");
             }
@@ -211,6 +216,145 @@ public class Mapping {
         
         return args;
     }
+
+    private boolean isCustomObject(Class<?> clazz) {
+        // Types primitifs et wrappers
+        if (clazz.isPrimitive() || 
+            clazz == String.class ||
+            clazz == Integer.class ||
+            clazz == Long.class ||
+            clazz == Double.class ||
+            clazz == Float.class ||
+            clazz == Boolean.class ||
+            clazz == Character.class ||
+            clazz == Byte.class ||
+            clazz == Short.class) {
+            return false;
+        }
+        
+        // Map, List, Set, etc.
+        if (Map.class.isAssignableFrom(clazz) ||
+            java.util.Collection.class.isAssignableFrom(clazz)) {
+            return false;
+        }
+
+        String packageName = clazz.getPackage() != null ? clazz.getPackage().getName() : "";
+        if (packageName.startsWith("java.") || 
+            packageName.startsWith("javax.") ||
+            packageName.startsWith("jakarta.")) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    private Object bindObject(Class<?> clazz, String prefix, HttpServletRequest request) {
+        try {
+            System.out.println("         🔨 Binding: " + clazz.getSimpleName() + " (prefix: " + prefix + ")");
+            
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+            
+            java.lang.reflect.Field[] fields = clazz.getDeclaredFields();
+            
+            for (java.lang.reflect.Field field : fields) {
+                field.setAccessible(true);
+                
+                String fieldName = field.getName();
+                String fullFieldName = prefix + "." + fieldName;
+                Class<?> fieldType = field.getType();
+                
+                // Objet imbriqué (e.department)
+                if (isCustomObject(fieldType)) {
+                    System.out.println("            🔗 Objet imbriqué: " + fieldName + " (" + fieldType.getSimpleName() + ")");
+                    Object nestedObject = bindObject(fieldType, fullFieldName, request);
+                    
+                    // Ne setter que si au moins un champ a été rempli
+                    if (hasAtLeastOneField(nestedObject)) {
+                        field.set(instance, nestedObject);
+                    }
+                }
+                else if (java.util.List.class.isAssignableFrom(fieldType) || fieldType.isArray()) {
+                    System.out.println("            📋 Liste/Tableau: " + fieldName);
+                    Object listValue = bindList(fieldType, fullFieldName, request);
+                    if (listValue != null) {
+                        field.set(instance, listValue);
+                    }
+                }
+                // Attribut simple
+                else {
+                    String paramValue = request.getParameter(fullFieldName);
+                    if (paramValue != null && !paramValue.trim().isEmpty()) {
+                        Object convertedValue = convertParameter(paramValue, fieldType);
+                        field.set(instance, convertedValue);
+                        System.out.println("            ✅ " + fullFieldName + " = " + convertedValue);
+                    }
+                }
+            }
+            
+            return instance;
+            
+             } catch (Exception e) {
+            System.out.println("         ❌ Erreur binding: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private boolean hasAtLeastOneField(Object obj) {
+        if (obj == null) return false;
+        
+        try {
+            for (java.lang.reflect.Field field : obj.getClass().getDeclaredFields()) {
+                field.setAccessible(true);
+                if (field.get(obj) != null) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // Ignorer
+        }
+        
+        return false;
+    }
+
+
+    private Object bindList(Class<?> fieldType, String fieldName, HttpServletRequest request) {
+        // Méthode 1 : checkboxes (name="e.hobbies" value="Lecture")
+        String[] values = request.getParameterValues(fieldName);
+        
+        if (values == null || values.length == 0) {
+            // Méthode 2 : index (name="e.hobbies[0]", name="e.hobbies[1]")
+            List<String> indexedValues = new ArrayList<>();
+            int index = 0;
+            while (true) {
+                String indexedName = fieldName + "[" + index + "]";
+                String value = request.getParameter(indexedName);
+                if (value == null || value.trim().isEmpty()) break;
+                indexedValues.add(value);
+                index++;
+            }
+            
+            if (!indexedValues.isEmpty()) {
+                values = indexedValues.toArray(new String[0]);
+            }
+        }
+        
+        if (values != null && values.length > 0) {
+            System.out.println("            ✅ " + fieldName + " = " + java.util.Arrays.toString(values));
+            
+            // Retourner List<String> par défaut
+            if (java.util.List.class.isAssignableFrom(fieldType)) {
+                return java.util.Arrays.asList(values);
+            }
+            // Retourner String[] si tableau demandé
+            else if (fieldType.isArray()) {
+                return values;
+            }
+        }
+        
+        return null;
+    }
+        
 
     private boolean isRequestParametersMap(Parameter param) {
         // Vérifier que c'est une Map
@@ -242,7 +386,6 @@ public class Mapping {
     private Map<String, Object> buildParametersMap(HttpServletRequest request) {
         Map<String, Object> parametersMap = new HashMap<>();
         
-        // Récupérer tous les noms de paramètres
         Map<String, String[]> parameterMap = request.getParameterMap();
         
         for (Map.Entry<String, String[]> entry : parameterMap.entrySet()) {
@@ -252,10 +395,8 @@ public class Mapping {
             if (paramValues == null || paramValues.length == 0) {
                 parametersMap.put(paramName, null);
             } else if (paramValues.length == 1) {
-                // Un seul paramètre : stocker directement la valeur
                 parametersMap.put(paramName, paramValues[0]);
             } else {
-                // Plusieurs valeurs (checkboxes) : stocker le tableau
                 parametersMap.put(paramName, paramValues);
             }
         }
