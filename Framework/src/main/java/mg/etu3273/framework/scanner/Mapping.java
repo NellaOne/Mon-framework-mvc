@@ -13,15 +13,12 @@ import java.util.regex.Pattern;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-
 public class Mapping {
     
     private String url;          
     private String className;     
     private Method method;    
-     private String httpMethod;     
-    
-    
+    private String httpMethod;     
     private boolean hasDynamicParams;  
     private String urlPattern;        
     private List<String> paramNames;  
@@ -30,18 +27,14 @@ public class Mapping {
         this.paramNames = new ArrayList<>();
     }
     
-    
     public Mapping(String url, String className, Method method) {
         this.url = url;
         this.className = className;
         this.method = method;
         this.paramNames = new ArrayList<>();
-        
         analyzeUrl();
     }
     
-    
-
     public Mapping(String url, String className, Method method, String httpMethod) {
         this.url = url;
         this.className = className;
@@ -51,7 +44,6 @@ public class Mapping {
         analyzeUrl();
     }
 
-    // mi-analyze url mi detecter params dynamiques
     private void analyzeUrl() {
         if (url == null) {
             this.hasDynamicParams = false;
@@ -75,7 +67,6 @@ public class Mapping {
         }
     }
     
-    // mi correspondre @pattern ve lay url
     public boolean matches(String requestedUrl) {
         if (!hasDynamicParams) {
             return url.equals(requestedUrl);
@@ -86,7 +77,6 @@ public class Mapping {
         }
     }
 
-    // mi extraire valeurs anle params avy @url
     public List<String> extractParamValues(String requestedUrl) {
         List<String> values = new ArrayList<>();
         
@@ -106,7 +96,6 @@ public class Mapping {
         return values;
     }
 
-    // supporter mapping methode http ?
     public boolean supportsHttpMethod(String requestMethod) {
         if (this.httpMethod == null) {
             return true;
@@ -115,7 +104,6 @@ public class Mapping {
     }
 
     public static Mapping findMapping(String requestedUrl, String httpMethod, Map<String, List<Mapping>> urlMappings) {
-
         List<Mapping> candidates = urlMappings.get(requestedUrl);
         if (candidates != null) {
             for (Mapping m : candidates) {
@@ -135,8 +123,15 @@ public class Mapping {
                         List<String> values = mapping.extractParamValues(requestedUrl);
                         if (!values.isEmpty()) {
                             System.out.println("   Valeurs extraites: " + values);
-                        }
 
+                            if (mapping.validateUrlParamTypes(values)) {
+                                 System.out.println("   ✅ Types compatibles");
+                                 return mapping;
+                            } else  {
+                                System.out.println("   ❌ Types incompatibles, recherche d'une autre route...");
+                                continue;
+                            }
+                        }
                         return mapping;
                     }
                 }
@@ -146,24 +141,73 @@ public class Mapping {
         return null;
     }
 
-    
-     public Object[] prepareMethodArguments(HttpServletRequest request, String requestedUrl) {
+    public boolean validateUrlParamTypes(List<String> urlParamValues) {
+        Parameter[] parameters = method.getParameters();
+        List<String> urlParamNames = getParamNames();
+        
+        for (int i = 0; i < urlParamNames.size(); i++) {
+            if (i >= urlParamValues.size()) {
+                continue; // Pas assez de valeurs
+            }
+            
+            String paramName = urlParamNames.get(i);
+            String paramValue = urlParamValues.get(i);
+            
+            // Trouver le type attendu de ce paramètre dans la méthode
+            Class<?> expectedType = null;
+            for (Parameter param : parameters) {
+                if (param.getName().equals(paramName)) {
+                    expectedType = param.getType();
+                    break;
+                }
+            }
+            
+            if (expectedType != null) {
+                // Tester la conversion
+                Object converted = convertParameter(paramValue, expectedType);
+                if (converted == null && paramValue != null && !paramValue.isEmpty()) {
+                    System.out.println("      ⚠️ Valeur '" + paramValue + "' incompatible avec " + expectedType.getSimpleName());
+                    return false; // Conversion impossible
+                }
+            }
+        }
+        return true;
+    }
+
+
+    public Object[] prepareMethodArguments(HttpServletRequest request, String requestedUrl) {
         Parameter[] parameters = method.getParameters();
         
         if (parameters.length == 0) {
             return new Object[0];
         }
 
+        System.out.println("   🔧 Injection des paramètres:");
+
         List<String> urlParamNames = getParamNames();
         List<String> urlParamValues = extractParamValues(requestedUrl);
+        
+        // Récupérer TOUS les paramètres HTTP disponibles
+        Map<String, String[]> allHttpParams = request.getParameterMap();
+        System.out.println("      📋 Paramètres HTTP disponibles: " + allHttpParams.keySet());
+        
+        // Identifier les préfixes utilisés par les objets
+        List<String> usedPrefixes = new ArrayList<>();
+        for (Parameter param : parameters) {
+            if (isCustomObject(param.getType())) {
+                usedPrefixes.add(param.getName());
+            }
+        }
+        System.out.println("      🏷️ Préfixes réservés pour objets: " + usedPrefixes);
         
         Object[] args = new Object[parameters.length];
         
         for (int i = 0; i < parameters.length; i++) {
             Parameter param = parameters[i];
             Class<?> paramType = param.getType(); 
-            String paramName = param.getName(); 
+            String paramName = param.getName();
 
+            // SPRINT 8 : Map<String, Object>
             if (isRequestParametersMap(param)) {
                 args[i] = buildParametersMap(request);
                 System.out.println("      ✅ " + paramName + " Map<String, Object> = " + 
@@ -171,26 +215,26 @@ public class Mapping {
                 continue;
             }
 
+            // SPRINT 8-bis : Objets personnalisés
             if (isCustomObject(paramType)) {
                 args[i] = bindObject(paramType, paramName, request);
                 System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = objet bindé (SPRINT 8-bis)");
                 continue;
             }
 
-      
-            // String httpParamName = paramName; 
+            // === PARAMÈTRES SIMPLES (String, Integer, etc.) ===
             String paramValue = null;
             String source = "";
             
+            // Sprint 6-bis : @RequestParam
             if (param.isAnnotationPresent(mg.etu3273.framework.annotation.RequestParam.class)) {
                 mg.etu3273.framework.annotation.RequestParam requestParam = 
                     param.getAnnotation(mg.etu3273.framework.annotation.RequestParam.class);
                 String httpParamName = requestParam.value(); 
                 paramValue = request.getParameter(httpParamName);
-                // source = "@RequestParam";
                 source = "@RequestParam(\"" + httpParamName + "\")";
             }
-
+            // Sprint 6-ter : URL dynamique {}
             else if (urlParamNames.contains(paramName)) {
                 int paramIndex = urlParamNames.indexOf(paramName);
                 if (paramIndex < urlParamValues.size()) {
@@ -198,25 +242,65 @@ public class Mapping {
                     source = "URL {" + paramName + "}";
                 }
             }
-
+            // Sprint 6 : Paramètre HTTP normal
             else {
+                // Essayer d'abord avec le nom du paramètre Java
                 paramValue = request.getParameter(paramName);
-                source = "HTTP param";
+                source = "HTTP param '" + paramName + "'";
+                
+                // Si pas trouvé (car compilé sans -parameters)
+                // Chercher un paramètre HTTP qui n'appartient à aucun objet
+                if (paramValue == null) {
+                    for (String httpParamName : allHttpParams.keySet()) {
+                         /* if (!httpParamName.contains(".") && !usedPrefixes.contains(httpParamName)) { 
+                            paramValue = request.getParameter(httpParamName);
+                            source = "HTTP param '" + httpParamName + "' (auto-détecté)";
+                            break;
+                         } */
+                        // Ignorer les paramètres avec "." (ils appartiennent à des objets)
+                        if (httpParamName.contains(".")) {
+                            continue;
+                        } 
+                        
+                        // Vérifier que ce paramètre n'est pas un préfixe d'objet
+                        boolean isObjectPrefix = false;
+                        for (String prefix : usedPrefixes) {
+                            if (httpParamName.equals(prefix)) {
+                                isObjectPrefix = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!isObjectPrefix) {
+                            String[] values = allHttpParams.get(httpParamName);
+                            if (values != null && values.length > 0) {
+                                paramValue = values[0];
+                                source = "HTTP param '" + httpParamName + "' (auto-détecté)";
+                                System.out.println("      🔍 Auto-détection: " + httpParamName + " = " + paramValue);
+                                break;
+                            }
+                        }
+                    }
+                }
             }
-            
-            // String paramValue = request.getParameter(httpParamName);
             
             if (paramValue != null) {
                 args[i] = convertParameter(paramValue, paramType);
                 System.out.println("      ✅ " + paramName + " (" + paramType.getSimpleName() + ") = " + args[i] + " (depuis " + source + ")");
+            } else {
                 args[i] = null;
-                System.out.println("      ⚠️ " + paramName + " (" + paramType.getSimpleName() + ") = null (pas dans request)");
+                System.out.println("      ⚠️ " + paramName + " (" + paramType.getSimpleName() + ") = null");
             }
         }
         
         return args;
     }
 
+    // ==================== SPRINT 8-bis : MÉTHODES DE BINDING ====================
+
+    /**
+     * Vérifie si c'est un objet personnalisé (Employee, Department, etc.)
+     */
     private boolean isCustomObject(Class<?> clazz) {
         // Types primitifs et wrappers
         if (clazz.isPrimitive() || 
@@ -237,7 +321,8 @@ public class Mapping {
             java.util.Collection.class.isAssignableFrom(clazz)) {
             return false;
         }
-
+        
+        // Classes Java standard
         String packageName = clazz.getPackage() != null ? clazz.getPackage().getName() : "";
         if (packageName.startsWith("java.") || 
             packageName.startsWith("javax.") ||
@@ -248,6 +333,9 @@ public class Mapping {
         return true;
     }
 
+    /**
+     * Crée et remplit un objet depuis la requête HTTP
+     */
     private Object bindObject(Class<?> clazz, String prefix, HttpServletRequest request) {
         try {
             System.out.println("         🔨 Binding: " + clazz.getSimpleName() + " (prefix: " + prefix + ")");
@@ -273,6 +361,7 @@ public class Mapping {
                         field.set(instance, nestedObject);
                     }
                 }
+                // Liste/Tableau
                 else if (java.util.List.class.isAssignableFrom(fieldType) || fieldType.isArray()) {
                     System.out.println("            📋 Liste/Tableau: " + fieldName);
                     Object listValue = bindList(fieldType, fullFieldName, request);
@@ -293,13 +382,16 @@ public class Mapping {
             
             return instance;
             
-             } catch (Exception e) {
+        } catch (Exception e) {
             System.out.println("         ❌ Erreur binding: " + e.getMessage());
             e.printStackTrace();
             return null;
         }
     }
 
+    /**
+     * Vérifie si au moins un champ de l'objet est non-null
+     */
     private boolean hasAtLeastOneField(Object obj) {
         if (obj == null) return false;
         
@@ -317,7 +409,9 @@ public class Mapping {
         return false;
     }
 
-
+    /**
+     * Gère les listes/tableaux
+     */
     private Object bindList(Class<?> fieldType, String fieldName, HttpServletRequest request) {
         // Méthode 1 : checkboxes (name="e.hobbies" value="Lecture")
         String[] values = request.getParameterValues(fieldName);
@@ -354,15 +448,14 @@ public class Mapping {
         
         return null;
     }
-        
+
+    // ==================== SPRINT 8 : MAP ====================
 
     private boolean isRequestParametersMap(Parameter param) {
-        // Vérifier que c'est une Map
         if (!Map.class.isAssignableFrom(param.getType())) {
             return false;
         }
 
-        // Vérifier les types génériques : Map<String, Object>
         Type genericType = param.getParameterizedType();
         if (!(genericType instanceof ParameterizedType)) {
             return false;
@@ -375,9 +468,7 @@ public class Mapping {
             return false;
         }
 
-        // Clé doit être String
         boolean keyIsString = typeArguments[0].equals(String.class);
-        // Valeur doit être Object
         boolean valueIsObject = typeArguments[1].equals(Object.class);
 
         return keyIsString && valueIsObject;
@@ -401,27 +492,22 @@ public class Mapping {
             }
         }
         
-        System.out.println("      📦 Map construite : " + parametersMap.keySet());
+        System.out.println("      📦 Map construite: " + parametersMap.keySet());
         
         return parametersMap;
     }
 
+    // ==================== CONVERSION ====================
 
     private Object convertParameter(String value, Class<?> targetType) {
-        if (value == null) return null;
+        if (value == null || value.trim().isEmpty()) return null;
         
         try {
             if (targetType == String.class) return value;
-            
             if (targetType == Integer.class || targetType == int.class) return Integer.valueOf(value);
-        
             if (targetType == Long.class || targetType == long.class) return Long.valueOf(value);
-        
-            
             if (targetType == Double.class || targetType == double.class) return Double.valueOf(value);
-            
             if (targetType == Float.class || targetType == float.class) return Float.valueOf(value);
-            
             if (targetType == Boolean.class || targetType == boolean.class) return Boolean.valueOf(value);
             
             return value;
@@ -432,6 +518,7 @@ public class Mapping {
         }
     }
 
+    // ==================== GETTERS / SETTERS ====================
 
     public String getUrl() {
         return url;
