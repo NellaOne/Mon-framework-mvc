@@ -10,9 +10,11 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import mg.etu3273.framework.annotation.RestAPI;
 import mg.etu3273.framework.scanner.Mapping;
 import mg.etu3273.framework.scanner.PackageScanner;
 import mg.etu3273.framework.utils.ResponseHandler;
+import mg.etu3273.framework.utils.JsonResponse;
 
 
 public class FrontServlet extends HttpServlet {    
@@ -52,8 +54,10 @@ public class FrontServlet extends HttpServlet {
         }
         
         Mapping mapping = Mapping.findMapping(path, httpMethod, urlMappings);
-           if (path.equals("/") || path.isEmpty()) {
-            handleControllerMethod(request, response, mapping, path);
+        if (path.equals("/") || path.isEmpty()) {
+            if (mapping != null) {
+                 handleControllerMethod(request, response, mapping, path);
+            }
             return;
         } 
 
@@ -77,8 +81,22 @@ public class FrontServlet extends HttpServlet {
             Class<?> clazz = Class.forName(mapping.getClassName());
             Object controllerInstance = clazz.getDeclaredConstructor().newInstance();
             Method method = mapping.getMethod();
+
+            boolean isRestAPI = method.isAnnotationPresent(RestAPI.class);
+
+             if (isRestAPI) {
+                System.out.println("   🌐 Mode API REST détecté pour: " + method.getName());
+            }
+
+
             Object[] methodArgs = mapping.prepareMethodArguments(request, requestedUrl);
             Object result = method.invoke(controllerInstance, methodArgs);
+
+            if (isRestAPI) {
+                JsonResponse jsonResponse =  ResponseHandler.prepareJsonResponse(result);
+                ResponseHandler.sendJsonResponse(response, jsonResponse);
+                return;
+            }
 
             if (result == null) {
                 ResponseHandler.sendSimpleResponse(response, "La méthode a retourné NULL");
