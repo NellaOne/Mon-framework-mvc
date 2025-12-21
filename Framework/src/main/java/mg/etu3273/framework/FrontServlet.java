@@ -3,6 +3,8 @@ package mg.etu3273.framework;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.List;
+import jakarta.servlet.annotation.MultipartConfig;  
+import jakarta.servlet.annotation.WebServlet;  
 import java.util.Map;
 
 import jakarta.servlet.RequestDispatcher;
@@ -13,10 +15,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import mg.etu3273.framework.annotation.RestAPI;
 import mg.etu3273.framework.scanner.Mapping;
 import mg.etu3273.framework.scanner.PackageScanner;
-import mg.etu3273.framework.utils.ResponseHandler;
 import mg.etu3273.framework.utils.JsonResponse;
+import mg.etu3273.framework.utils.ResponseHandler;
 
-
+@MultipartConfig  
 public class FrontServlet extends HttpServlet {    
     private static final String URL_MAPPINGS_KEY = "framework.urlMappings";
     private RequestDispatcher defaultDispatcher;
@@ -52,14 +54,37 @@ public class FrontServlet extends HttpServlet {
         if (urlMappings == null) {
             throw new ServletException("URL Mappings non initialisé dans ServletContext");
         }
-        
-        Mapping mapping = Mapping.findMapping(path, httpMethod, urlMappings);
+
         if (path.equals("/") || path.isEmpty()) {
+            System.out.println("   📍 URL racine détectée");
+
+            Mapping mapping = Mapping.findMapping("/", httpMethod, urlMappings);
+
             if (mapping != null) {
-                 handleControllerMethod(request, response, mapping, path);
+                System.out.println("   ✅ Mapping trouvé pour '/'");
+                handleControllerMethod(request, response, mapping, "/");
+            } else {
+                System.out.println("   ⚠️ Aucun mapping pour '/', vérification des ressources statiques...");
+                
+                // Vérifier si une ressource index.html existe
+                if (getServletContext().getResource("/index.html") != null) {
+                    System.out.println("   📄 Redirection vers /index.html");
+                    defaultDispatcher.forward(request, response);
+                } else {
+                    System.out.println("   ❌ Aucune ressource trouvée");
+                    ResponseHandler.send404Response(request, response, "/", httpMethod, urlMappings);
+                }
             }
             return;
-        } 
+        }
+
+         if (getServletContext().getResource(path) != null) {
+            System.out.println("   📄 Ressource statique trouvée: " + path);
+            defaultDispatcher.forward(request, response);
+            return;
+        }
+        
+        Mapping mapping = Mapping.findMapping(path, httpMethod, urlMappings);
 
         if (mapping != null) {
             handleControllerMethod(request, response, mapping, path);
